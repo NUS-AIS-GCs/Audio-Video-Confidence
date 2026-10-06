@@ -1,7 +1,11 @@
+.venv
+
 AVE_Dataset.zip
 AVE_Dataset
-Pre-trained_Encoders
 AVE-ECCV18
+# pre_trained_encoders
+pre_trained_encoders/visual_feature.h5
+
 
 Documentations/1_Audio_Visual_Sound_Source_Verification_Team_Report.docx
 Documentations/2_AV_SoundSource_Report_v2_REVISED-2.docx
@@ -10,5 +14,5 @@ Documentations/PRS-Proporsal_V1.docx
 Documentations/PRS-Proporsal_V3.docx
 Documentations/project_proposal_report.md
 
-# personal notes - ignore
+# personal notes
 Documentations/ReferencePromptsSwaraj.txt

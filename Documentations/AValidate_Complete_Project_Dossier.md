@@ -59,6 +59,7 @@ The core MVP accepts uploaded video clips via a **Streamlit** interface. A live 
 ### 2.1 Problem Statement
 
 Develop a multimodal audio-visual system that:
+
 - **Identifies** a sound event from the audio track of a video
 - **Localises it in time** (second-by-second)
 - **Verifies** whether the visual scene is consistent with the identified sound
@@ -68,7 +69,7 @@ Develop a multimodal audio-visual system that:
 For every input clip, the system answers:
 
 | # | Question | Output |
-|---|----------|--------|
+| --- | ---------- | -------- |
 | 1 | What sound/event is present? | Event class from 28 categories |
 | 2 | When is the event both audible and visible? | Per-second binary timeline |
 | 3 | How confident are the predictions? | Audio confidence + Visual confidence |
@@ -84,7 +85,7 @@ For every input clip, the system answers:
 ### 2.4 Representative Scenarios
 
 | Scenario | Visual | Audio | Expected Result |
-|----------|--------|-------|-----------------|
+| ---------- | -------- | ------- | ----------------- |
 | Genuine match | Dog visible | Dog bark | **Strong correspondence** |
 | Genuine match | Car visible | Car horn | **Strong correspondence** |
 | Clear mismatch | Dog visible | Siren | **Low / Mismatch** |
@@ -104,6 +105,7 @@ Existing audio classification and visual recognition systems can independently i
 ### 3.2 The Opportunity
 
 A system that reasons across both modalities can answer questions that neither modality alone can:
+
 - Is the visible object the source of the sound?
 - Should I trust this audio-visual pairing?
 - Is this video clip genuine or manipulated?
@@ -118,6 +120,7 @@ A system that reasons across both modalities can answer questions that neither m
 ### 3.4 Published Evidence
 
 Published results on the chosen AVE dataset quantify the value of multimodal fusion:
+
 - Audio-only: **59.5%** accuracy
 - Visual-only: **65.0%** accuracy
 - Audio + Visual: **74.0%** accuracy
@@ -180,8 +183,9 @@ Published results on the chosen AVE dataset quantify the value of multimodal fus
 ### 4.2 Component Breakdown
 
 #### Audio Branch
+
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **Input** | Audio track extracted from video → mono, fixed sample rate |
 | **Feature extraction** | Log-Mel spectrogram |
 | **Baseline encoder** | Small CNN on log-Mel features |
@@ -190,8 +194,9 @@ Published results on the chosen AVE dataset quantify the value of multimodal fus
 | **Output** | One audio embedding per second + event evidence |
 
 #### Visual Branch
+
 | Aspect | Detail |
-|--------|--------|
+| -------- | -------- |
 | **Input** | Video frames sampled at 1 fps (10 frames per 10s clip) |
 | **Baseline encoder** | ResNet/EfficientNet features |
 | **Main encoder** | **CLIP ViT-B/16** (vision-language pretrained transformer) |
@@ -200,19 +205,22 @@ Published results on the chosen AVE dataset quantify the value of multimodal fus
 | **Optional overlay** | COCO-pretrained object detector for visualization only (not part of core pipeline) |
 
 #### Temporal Alignment
+
 - Audio and visual embeddings are aligned at **1-second resolution**
 - Each second of audio is paired with the frame from the same timestamp
 - Produces 10 aligned (audio, visual) embedding pairs per 10-second clip
 
 #### Fusion Module
+
 | Version | Method | Detail |
 |---------|--------|--------|
 | **v1 (baseline)** | Late fusion | Concatenate aligned embeddings → MLP |
 | **v2 (upgrade)** | Cross-modal attention | Each modality attends to the other |
 
 #### Three Output Heads
+
 | Head | Task | Labels | Loss |
-|------|------|--------|------|
+| ------ | ------ | -------- | ------ |
 | **Head 1** | Event classification | 28 AVE categories | Cross-entropy (softmax) |
 | **Head 2** | Per-second presence | Audible-and-visible vs. background | Binary cross-entropy per second |
 | **Head 3** | Correspondence score | Match/Mismatch probability | Binary cross-entropy on generated pairs |
@@ -243,7 +251,7 @@ Until real checkpoints exist, this returns stub values so the front-end and eval
 ### 4.4 Technical Stack
 
 | Category | Tools |
-|----------|-------|
+| ---------- | ------- |
 | Language | Python |
 | Deep Learning | PyTorch, Hugging Face Transformers |
 | Audio Processing | torchaudio, librosa |
@@ -260,7 +268,7 @@ Until real checkpoints exist, this returns stub values so the front-end and eval
 ### 5.1 Dataset Overview
 
 | Dataset | Role | Details | Status |
-|---------|------|---------|--------|
+| --------- | ------ | --------- | -------- |
 | **AVE (Audio-Visual Event)** | **Primary** | 4,143 ten-second clips, 28 categories, per-second event/background labels, official train/val/test split, single download | **CORE** |
 | **Generated Pairs** | Correspondence supervision | Positives (original clip) + Negatives (audio-swapped), including hard negatives from acoustically similar categories | **CORE** — script-generated |
 | **VGGSound** | Scale-up/fallback | 200k+ clips, 310+ classes; available via Hugging Face mirror (Loie/VGGSound) | **OPTIONAL** — only if AVE is too small |
@@ -275,7 +283,7 @@ The full AVE benchmark set covers: church bell, dog bark, man speaking, violin, 
 ### 5.3 Preprocessing Pipeline
 
 | Step | Operation | Detail |
-|------|-----------|--------|
+| ------ | ----------- | -------- |
 | 1 | Extract audio | Mono, one fixed sample rate |
 | 2 | Sample frames | At timestamps aligned to each second (1 fps) |
 | 3 | Map labels | Per-second event / background annotations |
@@ -294,7 +302,7 @@ A critical design decision (revised from v1 where correspondence was hand-built)
 ### 6.1 Pair Types
 
 | Pair Type | Construction | Label | Purpose |
-|-----------|-------------|-------|---------|
+| ----------- | ------------- | ------- | --------- |
 | **Positive** | Clip with its own soundtrack | MATCH | Ground-truth alignment |
 | **Easy Negative** | Video paired with audio from a different category (e.g., dog video + siren audio) | MISMATCH | Easy to reject; baseline difficulty |
 | **Hard Negative** | Video paired with audio from acoustically similar category (e.g., guitar video + banjo audio; truck + bus) | MISMATCH | Forces model to use actual audio-visual evidence, not just category agreement |
@@ -313,7 +321,7 @@ This formulation follows the established audio-visual correspondence protocol fr
 ### 7.1 Progressive Development Stages
 
 | Stage | Approach | Purpose |
-|-------|----------|---------|
+| ------- | ---------- | --------- |
 | **Stage 1 — Baselines** | Log-Mel CNN (audio) + ResNet/EfficientNet (visual) | Establish floor performance |
 | **Stage 2 — Frozen pretrained** | BEATs + CLIP with only lightweight heads | Confirm pipeline works end-to-end |
 | **Stage 3 — LoRA fine-tuning** *(main contribution)* | LoRA adapters on both encoders, joint training with fusion and 3 heads, rank ablation (r=4,8,16) | Primary modelling contribution |
@@ -329,7 +337,7 @@ This formulation follows the established audio-visual correspondence protocol fr
 ### 7.3 Correspondence Scoring (Revised from v1)
 
 | Aspect | v1 (Original) | v2 (Revised) |
-|--------|---------------|--------------|
+| -------- | --------------- | -------------- |
 | Method | Hand-written object-to-sound compatibility table | Learned shared embedding space |
 | Labels | Small hand-built test set | Thousands of programmatically generated pairs |
 | Decision | Rule-based lookup | Cosine similarity → trained match probability |
@@ -340,7 +348,7 @@ This formulation follows the established audio-visual correspondence protocol fr
 ### 7.4 Technique Mapping to Module Requirements
 
 | Required Aspect | How AValidate Addresses It |
-|-----------------|---------------------------|
+| ----------------- | --------------------------- |
 | **Supervised / unsupervised learning** | Event classification and per-second labels are supervised (AVE annotations). Correspondence labels are generated from data itself — self-supervised in style, no manual annotation |
 | **Machine learning / deep learning** | Two pretrained transformers fine-tuned with LoRA, plus CNN baselines for comparison |
 | **Hybrid / ensemble approach** | Cross-modal fusion of two independently encoded modalities, plus multi-task heads |
@@ -355,7 +363,7 @@ This formulation follows the established audio-visual correspondence protocol fr
 ### 8.1 Quantitative Experiments
 
 | # | Experiment | Question | Comparison | Measures |
-|---|-----------|----------|------------|----------|
+| --- | ----------- | ---------- | ------------ | ---------- |
 | 1 | Unimodal event recognition | Does each branch recognise events on its own? | Lightweight baseline vs. pretrained/adapted encoders | Accuracy, Macro-F1, confusion matrix |
 | 2 | Audio-visual correspondence | Does fusion add anything over two separate classifiers? | Label-agreement baseline vs. learned fusion (simple vs. attention) | ROC-AUC, PR-AUC, F1 at validation-selected threshold |
 | 3 | Negative difficulty | Does it still work when the mismatch is subtle? | Easy vs. hard (similar-category, time-shifted) negatives | ROC-AUC per negative type |
@@ -365,7 +373,7 @@ This formulation follows the established audio-visual correspondence protocol fr
 ### 8.2 Ablation Studies
 
 | Model | Evidence | Purpose |
-|-------|----------|---------|
+| ------- | ---------- | --------- |
 | Audio-only | Audio | How well sound alone identifies the event |
 | Visual-only | Frames | How well vision alone identifies the event |
 | Audio + Video (frozen encoders) | Both | Benefit of multimodal evidence |
@@ -399,36 +407,112 @@ This formulation follows the established audio-visual correspondence protocol fr
 
 ---
 
-## 9. Application & User Interface
+## 9. Application & User Interface (Streamlit Explainable MVP)
 
-### 9.1 Streamlit MVP Features
+### 9.1 Explainability-Driven UI Architecture
 
-1. Upload a short video clip
-2. Display the uploaded video
-3. Extract audio automatically
-4. Show predicted event class and audio confidence
-5. Show a per-second timeline strip marking when the event is audible and visible
-6. Show sampled frames (optionally with detected object overlays)
-7. Show audio-visual correspondence score
-8. Show interpretive assessment: **Strong Match / Weak Match / Uncertain**
-9. **"Swap the Audio" button** — pairs the video with another clip's soundtrack so the audience can watch the correspondence score collapse live
-
-### 9.2 Example UI Output
+The Streamlit front-end is purposefully architected as an **Explainable AI (XAI)** system. Rather than acting as a black-box scoring tool, it exposes the internal decision pathway of all three prediction heads through a clear visual hierarchy:
 
 ```
-Predicted sound:           Dog bark
-Audio confidence:          91%
-Candidate source:          Dog
-Visual/source confidence:  88%
-Audio-visual correspondence: 93%
-Assessment:                STRONG CORRESPONDENCE
++------------------------------------+-----------------------------------------------------+
+|                                    | DECISION                                            |
+|                                    | [ STRONG MATCH ] (0.91 correspondence)              |
+|                                    | Event: Dog bark (0.88) [▼ Top-5 Probability Drawer] |
+|        [ VIDEO PLAYER ]            +-----------------------------------------------------+
+|        input_clip.mp4 (10 s)       | CONFIDENCE BANDS (Calibrated on Validation Data)    |
+|                                    | 🟢 Strong match       (score > τ_upper)             |
+|                                    | 🟡 Weak / Uncertain   (τ_lower ≤ score ≤ τ_upper)   |
+| [ 🔀 Simulate Audio Swap (Test) ]  | 🔴 Mismatch           (score < τ_lower)             |
++------------------------------------+-----------------------------------------------------+
+| PER-SECOND EVIDENCE (10-Second Temporal Localization)                                    |
+| Timestamps:      0s     1s     2s     3s     4s     5s     6s     7s     8s     9s       |
+| Audio: bark     [  ]   [██]   [██]   [██]   [  ]   [██]   [██]   [██]   [██]   [  ]      |
+| Visual: dog     [██]   [██]   [██]   [██]   [██]   [██]   [██]   [██]   [██]   [██]      |
+| Audible & Vis   [  ]   [★★]   [★★]   [★★]   [  ]   [★★]   [★★]   [★★]   [★★]   [  ]      |
++------------------------------------------------------------------------------------------+
+| EXPLAINABILITY & COUNTERFACTUAL DIAGNOSTICS (Expandable Panel)                           |
+| * Modality Attribution: Audio Branch 91% | Visual Branch 86% | Fused Confidence 95%      |
+| * Second-by-Second Cosine Similarity Trajectory                                          |
+| * Semantic Dissonance Diagnostic (Edge Case Explanations)                                |
++------------------------------------------------------------------------------------------+
 ```
 
-### 9.3 Webcam + Microphone Mode (Stretch Goal)
+---
 
-**Demoted from live Streamlit feature to pre-recorded demonstration clip.**
+### 9.2 Per-Head Explainability Suite
 
-Rationale: Live microphone capture in Streamlit is unreliable, carries no marks, and risks the graded deliverables. Instead, a short screen capture of the pipeline running on self-recorded clips will be produced if the core system finishes early.
+#### 1. Head 1 Explainability: Event Classification
+
+* **Top-5 Probability Distribution & Margin:** An expandable drawer displays a horizontal bar chart of the top-5 predicted classes with softmax probabilities. The margin between Rank-1 and Rank-2 clearly explains whether the prediction is robust or ambiguous.
+- **Modality Attribution (Audio vs. Visual vs. Fused):** Displays unimodal predictions alongside the fused decision:
+  - Audio Branch: `Dog bark (0.91)`
+  - Visual Branch: `Dog (0.86)`
+  - Fused Head: `Dog bark (0.95)`
+  - *Explains whether the final event decision was audio-led, vision-led, or mutually reinforced.*
+
+#### 2. Head 2 Explainability: Per-Second Temporal Presence & Background Detection
+
+* **3-Track Co-Presence Evidence Matrix:**
+  - **Track 1 (`Audio: <sound>`):** Visualizes which seconds contain the audible sound pattern.
+  - **Track 2 (`Visual: <source>`):** Visualizes which seconds contain the visual candidate source.
+  - **Track 3 (`Audible & visible`):** Visualizes the joint intersection representing active audio-visual event seconds.
+- **"Why is this second Background?" Diagnostics:**
+  - Directly clarifies the nature of non-event seconds:
+    - *Example at Second 0 & 4:* Visual source is present, but audio is silent $\implies$ classified as **Background** because an event requires joint occurrence.
+    - *Example at Second 9:* Audio echo is audible, but visual object has moved off-frame $\implies$ classified as **Background**.
+- **Synchronized Frame Filmstrip:** Displays the 10 sampled frames (1 fps) directly aligned above each timestamp block. Clicking any second seeks the video or highlights that specific frame.
+
+#### 3. Head 3 Explainability: Cross-Modal Correspondence Verification
+
+* **Calibrated Decision Gauge:**
+  - Rather than outputting an uncalibrated raw score, a horizontal gauge displays the score needle relative to empirical validation thresholds:
+    - `[0.00 – τ_lower)`: 🔴 **Mismatch**
+    - `[τ_lower – τ_upper]`: 🟡 **Weak / Uncertain**
+    - `(τ_upper – 1.00]`: 🟢 **Strong Match**
+- **Second-by-Second Cosine Similarity Trajectory:**
+  - A continuous line graph plotting the alignment $\cos(\mathbf{z}_a^t, \mathbf{z}_v^t)$ across $t=0\dots9\,\text{s}$, pinpointing the exact moments where multimodal alignment peaks or dips.
+
+---
+
+### 9.3 Counterfactual Sandbox: "Swap the Audio" Feature
+
+The primary interactive feature of the demo is the **"Swap Audio" button**:
+
+1. When clicked, the application replaces the clip's soundtrack with an unrelated audio track (e.g., *siren*) or a semantically tricky audio track (e.g., *banjo* on a *guitar* video).
+2. The user watches the entire dashboard update dynamically:
+   - `Audio` track updates to the swapped class.
+   - `Audible & visible` joint track completely empties out.
+   - `Correspondence Score` drops from `0.91` to `0.14`.
+   - `Decision Pill` flips from 🟢 **STRONG MATCH** to 🔴 **MISMATCH**.
+3. **The Counterfactual Explanation:** The system explicitly notes: *"Correspondence collapsed because acoustic embeddings of the swapped sound do not project into the visual subspace of the on-screen subject."*
+
+---
+
+### 9.4 Semantic Dissonance Diagnostics for Edge Cases
+
+For complex real-world scenes, the UI provides context-aware diagnostic alert cards:
+
+| Edge Case | UI Diagnostic Output |
+| :--- | :--- |
+| **Imitation** (e.g., human barking like a dog) | 🟡 **Weak/Uncertain:** Acoustic features strongly match *Dog Bark (91%)*, but visual features detect *Person (96%)*. Low correspondence is due to cross-modal semantic dissonance, **not** audio classification failure. |
+| **Off-screen sound** (e.g., siren heard while viewing a park) | 🔴 **Mismatch:** Sound *Siren (94%)* is clearly detected, but no corresponding vehicle exists in frame across all 10 seconds. |
+| **Multiple visible objects** (e.g., dog and car in frame, car horn sounds) | 🟢 **Strong Match:** Multiple candidate sources detected. Attention weights confirm dominant alignment with the *Car* region ($87\%$). |
+
+---
+
+### 9.5 Streamlit Implementation Blueprint
+
+* **Layout:** Built using responsive `st.columns([3, 2])` for the video player and decision card, and full-width `st.container()` for the temporal evidence grid.
+- **Badges & Grid:** Implemented with lightweight custom CSS flexboxes for smooth rendering of the 10-second timeline blocks.
+- **Plots:** Interactive Plotly charts for the Top-5 probability distribution and temporal similarity trajectories.
+- **Latency Management:** Caching encoder feature extraction (`@st.cache_data`) ensures instant response times when toggling between original and audio-swapped counterfactuals.
+
+---
+
+### 9.6 Webcam + Microphone Mode (Stretch Goal)
+
+**Demoted from live Streamlit feature to pre-recorded demonstration clip.**  
+*Rationale:* Live microphone/webcam capture in Streamlit introduces driver issues, audio buffer lag, and browser permission hurdles that carry zero grading marks. If time permits after model freeze (20 Oct), a clean screen recording of the pipeline processing locally captured clips will be included as supplementary demo material.
 
 ---
 
@@ -437,7 +521,7 @@ Rationale: Live microphone capture in Streamlit is unreliable, carries no marks,
 ### 10.1 Role Distribution
 
 | Member | Model Work | App Work | Man-days |
-|--------|-----------|----------|----------|
+| -------- | ----------- | ---------- | ---------- |
 | **Ghanashyam** | BEATs + LoRA audio encoder, cross-modal attention fusion, three output heads, LoRA rank ablation | Inference layer: checkpoint loading, `predict()` entry point, latency/caching | 10 |
 | **Member 2 (Swaraj)** | CLIP ViT + LoRA visual branch, visual-only baseline, robustness experiments | Front end: upload flow, video player, frame strip, per-second timeline, swap-audio button | 10 |
 | **Member 3 (Veeramani)** | AVE pipeline and match/mismatch pair generator, audio CNN baseline, evaluation harness, ablation runs | Results view: metrics and confusion matrices in the app, packaging, demo recording | 10 |
@@ -446,6 +530,7 @@ Rationale: Live microphone capture in Streamlit is unreliable, carries no marks,
 ### 10.2 Design Principle
 
 Every member:
+
 - **Trains** a model component (so everyone has model work for the individual reflection report)
 - **Owns** a slice of the Streamlit app (so no one is just "the app person")
 
@@ -458,7 +543,7 @@ The audio branch is paired with the fusion module because that is where most of 
 ### 11.1 Phased Development (30 man-days total)
 
 | Phase | Work | Man-days |
-|-------|------|----------|
+| ------- | ------ | ---------- |
 | 1 — Data | Download AVE, verify integrity, extract frames at 1 fps, build pair generator, reproduce official split | 3 |
 | 2 — Baselines | Audio-only and visual-only baselines | 3 |
 | 3 — Pretrained (frozen) | BEATs and CLIP embeddings + light heads, end-to-end pipeline working | 3 |
@@ -473,7 +558,7 @@ The audio branch is paired with the fusion module because that is where most of 
 ### 11.2 Key Milestones
 
 | Date | Milestone |
-|------|-----------|
+| ------ | ----------- |
 | **30 Sep 2026** | Project proposal submitted |
 | **6 Oct 2026** | First presentation (9am–6pm, Zoom): problem, data, baselines, early results |
 | **7–20 Oct 2026** | LoRA fine-tuning and fusion; **model results frozen on 20 Oct** |
@@ -488,7 +573,7 @@ The audio branch is paired with the fusion module because that is where most of 
 ## 12. Module Requirements Mapping
 
 | Required Aspect | Where It Appears in AValidate |
-|-----------------|-------------------------------|
+| ----------------- | ------------------------------- |
 | Supervised / unsupervised learning | Supervised: event class and per-second labels. Self-supervised: correspondence labels generated from data without human annotation |
 | Machine learning / deep learning | Two pretrained transformers fine-tuned with LoRA, plus CNN baselines for comparison |
 | Hybrid / ensemble approach | Cross-modal fusion of two independently encoded modalities, plus multi-task heads |
@@ -503,7 +588,7 @@ The audio branch is paired with the fusion module because that is where most of 
 ### 13.1 Fundamental Limitations
 
 | Limitation | Detail |
-|-----------|--------|
+| ----------- | -------- |
 | **Cannot prove physical causation** | A low correspondence score means weak visual evidence, not that the predicted sound is impossible. The system cannot prove that a visible object physically generated a sound. |
 | **Off-screen source ambiguity** | Off-screen sources, occlusion, background sounds, and multiple simultaneous sources make correspondence inherently ambiguous. |
 | **No real-world manipulated media testing** | Generated negatives are synthetic audio swaps, not deliberately edited/dubbed video. Performance on real-world deepfakes or manipulated media is untested. |
@@ -514,7 +599,7 @@ The audio branch is paired with the fusion module because that is where most of 
 ### 13.2 Data Limitations
 
 | Issue | Impact |
-|-------|--------|
+| ------- | -------- |
 | AVE has only 4,143 clips across 28 categories | Limited scale; some categories may be under-represented |
 | VGGSound's official download is no longer available | Must use Hugging Face mirror, raising potential data provenance questions |
 | VGG-SS is a test benchmark only | Cannot be used for training; only for qualitative evaluation |
@@ -523,7 +608,7 @@ The audio branch is paired with the fusion module because that is where most of 
 ### 13.3 Model Limitations
 
 | Issue | Impact |
-|-------|--------|
+| ------- | -------- |
 | LoRA is parameter-efficient but not full fine-tuning | May miss some adaptation potential of full fine-tuning |
 | Late fusion may miss early interaction patterns | Concatenation + MLP doesn't capture cross-modal interactions at feature level |
 | Single-frame sampling at 1 fps | Misses motion cues and fast events |
@@ -534,7 +619,7 @@ The audio branch is paired with the fusion module because that is where most of 
 ## 14. Risks, Challenges & Mitigations
 
 | Risk | Why It Matters | Mitigation |
-|------|---------------|------------|
+| ------ | --------------- | ------------ |
 | **AVE download link (Google Drive) is dead or slow** | Blocks the entire project data pipeline | Verify in week 1. Fallback: VGGSound subset from HuggingFace mirror with correspondence pairs generated the same way; per-second labels dropped (project runs with 2 outputs instead of 3) |
 | **Too many models/modalities** | Integration and training become too slow | Frozen encoders + late fusion first; LoRA only after pipeline runs end-to-end |
 | **Complex fusion too early** | Hard to debug and explain | Concatenation → attention, in that order |
@@ -626,32 +711,32 @@ Based on a thorough analysis of all project documentation, the following recomme
 
 ### 16.2 Data Recommendations
 
-4. **Verify AVE download immediately** — this is the single biggest risk. Have the VGGSound fallback plan ready to execute with zero delay.
+1. **Verify AVE download immediately** — this is the single biggest risk. Have the VGGSound fallback plan ready to execute with zero delay.
 
-5. **Log every preprocessing decision** — sample rate, spectrogram parameters, frame extraction method, normalisation, augmentation. These are needed for reproducibility and the report.
+2. **Log every preprocessing decision** — sample rate, spectrogram parameters, frame extraction method, normalisation, augmentation. These are needed for reproducibility and the report.
 
-6. **Create a "hard negative" difficulty sweep** — vary the semantic distance between swapped categories to produce a difficulty curve, not just easy/hard buckets. This gives richer analysis.
+3. **Create a "hard negative" difficulty sweep** — vary the semantic distance between swapped categories to produce a difficulty curve, not just easy/hard buckets. This gives richer analysis.
 
 ### 16.3 Evaluation Recommendations
 
-7. **Always report background F1** — the 82.2% accuracy trap is real and would be immediately caught by reviewers.
+1. **Always report background F1** — the 82.2% accuracy trap is real and would be immediately caught by reviewers.
 
-8. **Calibrate correspondence scores properly** — use temperature scaling or Platt scaling on the validation set. The ECE and reliability diagram will be important evidence of practical utility.
+2. **Calibrate correspondence scores properly** — use temperature scaling or Platt scaling on the validation set. The ECE and reliability diagram will be important evidence of practical utility.
 
-9. **Create a "failure gallery"** — curate the most interesting failure cases (false matches, false mismatches, ambiguous cases) as a dedicated section in the report. This demonstrates analytical maturity.
+3. **Create a "failure gallery"** — curate the most interesting failure cases (false matches, false mismatches, ambiguous cases) as a dedicated section in the report. This demonstrates analytical maturity.
 
 ### 16.4 Process Recommendations
 
-10. **Enforce the 20 Oct model freeze** — this is the single most important schedule discipline. The temptation to keep tuning will be strong; resist it.
+ 1. **Enforce the 20 Oct model freeze** — this is the single most important schedule discipline. The temptation to keep tuning will be strong; resist it.
 
-11. **Build the Streamlit app with stub outputs from day 1** — the interface agreement is already defined. Having a working UI early enables integration testing throughout development, not just at the end.
+ 2. **Build the Streamlit app with stub outputs from day 1** — the interface agreement is already defined. Having a working UI early enables integration testing throughout development, not just at the end.
 
-12. **Record the demo video before writing the report** — the video forces you to articulate results clearly, which makes report-writing faster.
+ 3. **Record the demo video before writing the report** — the video forces you to articulate results clearly, which makes report-writing faster.
 
 ### 16.5 Stretch Goals (Only After Core Is Complete)
 
 | Priority | Extension |
-|----------|-----------|
+| ---------- | ----------- |
 | 1st | Object-detection overlay in Streamlit (COCO-pretrained, visualisation only) |
 | 2nd | VGG-SS localisation qualitative check |
 | 3rd | Cross-modal attention (if concat+MLP is already working) |
@@ -662,6 +747,7 @@ Based on a thorough analysis of all project documentation, the following recomme
 ### 16.6 Things to Watch Out For
 
 > [!CAUTION]
+>
 > - **Do not** build a hand-written object-to-sound compatibility table — this was explicitly removed in v2 because it is rule-based and brittle.
 > - **Do not** report imitation cases as measured results — no labelled data exists for these; they are qualitative demos only.
 > - **Do not** use VGG-SS for training — it is a test benchmark only.
@@ -683,12 +769,12 @@ Based on a thorough analysis of all project documentation, the following recomme
 ### Dataset Links
 
 | Dataset | URL |
-|---------|-----|
-| VGGSound | https://www.robots.ox.ac.uk/~vgg/data/vggsound/ |
-| VGGSound (HF mirror) | https://huggingface.co/datasets/Loie/VGGSound |
-| VGG-SS | https://www.robots.ox.ac.uk/~vgg/research/lvs/ |
-| AudioSet | https://research.google.com/audioset/ |
-| COCO | https://cocodataset.org/ |
+| --------- | ----- |
+| VGGSound | <https://www.robots.ox.ac.uk/~vgg/data/vggsound/> |
+| VGGSound (HF mirror) | <https://huggingface.co/datasets/Loie/VGGSound> |
+| VGG-SS | <https://www.robots.ox.ac.uk/~vgg/research/lvs/> |
+| AudioSet | <https://research.google.com/audioset/> |
+| COCO | <https://cocodataset.org/> |
 
 ---
 
@@ -697,7 +783,7 @@ Based on a thorough analysis of all project documentation, the following recomme
 This final dossier was synthesised from the following source documents in the project repository:
 
 | Document | Type | Content |
-|----------|------|---------|
+| ---------- | ------ | --------- |
 | `project_proposal_report.md` | Markdown | Official submitted project proposal |
 | `1 Audio_Visual_Sound_Source_Verification_Team_Report.docx` | Word | Original team planning report (v1) — concept, data strategy, system design, test cases, MVP plan |
 | `2 AV_SoundSource_Report_v2_REVISED-2.docx` | Word | Revised team report (v2) — trained correspondence, LoRA, AVE pivot, delivery plan, effort budget, timeline |

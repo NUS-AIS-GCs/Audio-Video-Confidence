@@ -9,3 +9,13 @@ Documentations/3_AValidate_Technique_Mapping.docx
 Documentations/PRS-Proporsal_V1.docx
 Documentations/PRS-Proporsal_V3.docx
 Documentations/project_proposal_report.md
+# Audio branch: data and outputs never go in git
+_local/
+work/
+artifacts/
+cache/
+*.npy
+*.pt
+*.wav
+__pycache__/
+.ipynb_checkpoints/

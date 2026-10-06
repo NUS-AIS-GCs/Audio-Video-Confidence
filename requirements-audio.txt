@@ -1,0 +1,6 @@
+# Colab already ships torch, torchaudio, numpy and pandas.
+gdown>=5.1
+scikit-learn
+matplotlib
+tqdm
+soundfile

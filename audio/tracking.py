@@ -2,35 +2,13 @@
 
 Setup (Colab): put your key in Colab Secrets as WANDB_API_KEY and export it before running, e.g.
     os.environ["WANDB_API_KEY"] = userdata.get("WANDB_API_KEY")
-Optional: WANDB_ENTITY (your username or team), WANDB_PROJECT (default "avalidate").
+Required: WANDB_ENTITY (your username or team, as in wandb.ai/<name>). Optional: WANDB_PROJECT (default "avalidate").
 """
 import os
 from pathlib import Path
 
 PROJECT = os.environ.get("WANDB_PROJECT", "avalidate")
 ENTITY = os.environ.get("WANDB_ENTITY") or None
-
-
-def _guess_entity():
-    """Some accounts have no default entity, and wandb.init then fails. Fall back to the
-    account's default entity, else its username, else its first team. Set WANDB_ENTITY to override."""
-    try:
-        import wandb
-        api = wandb.Api()
-        if api.default_entity:
-            return api.default_entity
-        viewer = api.viewer
-        for attr in ("username", "entity"):
-            try:
-                name = getattr(viewer, attr)
-                if name:
-                    return name
-            except Exception:
-                pass
-        teams = getattr(viewer, "teams", None) or []
-        return teams[0] if teams else None
-    except Exception:
-        return None
 
 
 class Tracker:
@@ -40,8 +18,11 @@ class Tracker:
             return
         import wandb
         id_file = run_dir / "wandb_run_id.txt"
-        kwargs = dict(project=PROJECT, entity=ENTITY or _guess_entity(), group="audio", tags=["audio", "baseline"])
-        print(f"W&B: logging to {kwargs['entity'] or '(account default)'}/{PROJECT}")
+        if not ENTITY:
+            raise SystemExit("W&B: set WANDB_ENTITY to your wandb.ai username or team (the name in wandb.ai/<name>), "
+                             "e.g. os.environ['WANDB_ENTITY'] = 'yourname', or run without --wandb.")
+        kwargs = dict(project=PROJECT, entity=ENTITY, group="audio", tags=["audio", "baseline"])
+        print(f"W&B: logging to {ENTITY}/{PROJECT}")
         if resume and id_file.exists():
             self.run = wandb.init(id=id_file.read_text().strip(), resume="allow", **kwargs)
         else:

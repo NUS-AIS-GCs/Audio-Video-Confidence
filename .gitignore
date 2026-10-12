@@ -13,3 +13,14 @@ Documentations/~$Group 25 - AValidate - Proposal Presentation.pptx
 
 # personal notes
 Documentations/ReferencePromptsSwaraj.txt
+
+# Audio branch: data and outputs never go in git
+_local/
+work/
+artifacts/
+cache/
+*.npy
+*.pt
+*.wav
+__pycache__/
+.ipynb_checkpoints/

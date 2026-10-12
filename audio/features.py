@@ -4,7 +4,7 @@ Output per split in FEATURE_DIR:
   {split}_X.npy      (N, 10, 64, 100) float16   log-Mel, not yet normalised
   {split}_y.npy      (N, 10)          int64     per-second label, 28 = background
   {split}_yclip.npy  (N,)             int64     clip category
-  {split}_ids.csv    clip_id order
+  {split}_ids.csv    row order: sample_id (= clip_id__label), clip_id, category, start, end
   norm_stats.json    per-mel-bin mean/std from the training split only
 
 Run: python -m audio.features
@@ -53,7 +53,7 @@ def build_split(split: str) -> None:
     np.save(C.FEATURE_DIR / f"{split}_X.npy", X)
     np.save(C.FEATURE_DIR / f"{split}_y.npy", y)
     np.save(C.FEATURE_DIR / f"{split}_yclip.npy", df["label"].to_numpy(np.int64))
-    df[["clip_id", "category", "start", "end"]].to_csv(C.FEATURE_DIR / f"{split}_ids.csv", index=False)
+    df[["sample_id", "clip_id", "category", "start", "end"]].to_csv(C.FEATURE_DIR / f"{split}_ids.csv", index=False)
     print(f"{split}: X {X.shape}, y {y.shape}")
 
 

@@ -19,9 +19,10 @@ WORK_ROOT = Path(os.environ.get(
 
 # Persistent
 ZIP_ON_DRIVE = DRIVE_ROOT / "data" / "AVE_Dataset.zip"
-FEATURE_DIR = DRIVE_ROOT / "cache" / "audio_logmel"
+# v2: one sample per AVE annotation row (v1 keyed by video id and dropped 28 rows)
+FEATURE_DIR = DRIVE_ROOT / "cache" / "audio_logmel_v2"
 ARTIFACT_DIR = DRIVE_ROOT / "artifacts" / "audio_baseline"
-EMBED_DIR = DRIVE_ROOT / "embeddings" / "audio_baseline"
+EMBED_DIR = DRIVE_ROOT / "embeddings" / "audio_baseline_v2"
 
 # Scratch
 AVE_ROOT = WORK_ROOT / "AVE_Dataset"

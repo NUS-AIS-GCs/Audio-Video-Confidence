@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader
 from audio import config as C
 from audio.dataset import AVEAudio, norm_stats
 from audio.model import AudioCNN
+from audio.tracking import Tracker
 
 
 def pick_device() -> torch.device:
@@ -75,6 +76,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-id", required=True)
     ap.add_argument("--batch", type=int, default=64)
+    ap.add_argument("--wandb", action="store_true", help="add test results to the training run in W&B")
     a = ap.parse_args()
     run_dir = C.ARTIFACT_DIR / a.run_id
     device = pick_device()
@@ -87,6 +89,10 @@ def main() -> None:
         if split == "test":
             save_confusion(YC, P[:, :, : C.N_EVENTS].mean(1).argmax(-1), names, run_dir / "confusion_test.png")
     (run_dir / "results.json").write_text(json.dumps(results, indent=2))
+    tracker = Tracker(a.wandb, run_dir, a.run_id, resume=True)
+    tracker.summary({f"{s}_{k}": v for s, m in results.items() for k, v in m.items()})
+    tracker.image("confusion_test", run_dir / "confusion_test.png")
+    tracker.finish()
     print(json.dumps(results, indent=2))
 
 

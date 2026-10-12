@@ -24,7 +24,8 @@ def extract_one(video, out_path) -> str:
 
 def main() -> None:
     C.WAV_DIR.mkdir(parents=True, exist_ok=True)
-    clips = pd.concat([load_split(s) for s in C.SPLITS], ignore_index=True)
+    # one wav per video: the 45 doubly-annotated videos share their audio file
+    clips = pd.concat([load_split(s) for s in C.SPLITS], ignore_index=True).drop_duplicates("clip_id")
     missing = clips[clips["video"].isna()]
     clips = clips.dropna(subset=["video"])
     jobs = [(row.video, C.WAV_DIR / f"{row.clip_id}.wav") for row in clips.itertuples()]

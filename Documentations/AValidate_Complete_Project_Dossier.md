@@ -399,36 +399,104 @@ This formulation follows the established audio-visual correspondence protocol fr
 
 ---
 
-## 9. Application & User Interface
+## 9. Application & User Interface (Streamlit Explainable MVP)
 
-### 9.1 Streamlit MVP Features
-
-1. Upload a short video clip
-2. Display the uploaded video
-3. Extract audio automatically
-4. Show predicted event class and audio confidence
-5. Show a per-second timeline strip marking when the event is audible and visible
-6. Show sampled frames (optionally with detected object overlays)
-7. Show audio-visual correspondence score
-8. Show interpretive assessment: **Strong Match / Weak Match / Uncertain**
-9. **"Swap the Audio" button** — pairs the video with another clip's soundtrack so the audience can watch the correspondence score collapse live
-
-### 9.2 Example UI Output
+### 9.1 Explainability-Driven UI Architecture
+The Streamlit front-end is purposefully architected as an **Explainable AI (XAI)** system. Rather than acting as a black-box scoring tool, it exposes the internal decision pathway of all three prediction heads through a clear visual hierarchy:
 
 ```
-Predicted sound:           Dog bark
-Audio confidence:          91%
-Candidate source:          Dog
-Visual/source confidence:  88%
-Audio-visual correspondence: 93%
-Assessment:                STRONG CORRESPONDENCE
++------------------------------------+-----------------------------------------------------+
+|                                    | DECISION                                            |
+|                                    | [ STRONG MATCH ] (0.91 correspondence)              |
+|                                    | Event: Dog bark (0.88) [▼ Top-5 Probability Drawer] |
+|        [ VIDEO PLAYER ]            +-----------------------------------------------------+
+|        input_clip.mp4 (10 s)       | CONFIDENCE BANDS (Calibrated on Validation Data)    |
+|                                    | 🟢 Strong match       (score > τ_upper)             |
+|                                    | 🟡 Weak / Uncertain   (τ_lower ≤ score ≤ τ_upper)   |
+| [ 🔀 Simulate Audio Swap (Test) ]  | 🔴 Mismatch           (score < τ_lower)             |
++------------------------------------+-----------------------------------------------------+
+| PER-SECOND EVIDENCE (10-Second Temporal Localization)                                    |
+| Timestamps:      0s     1s     2s     3s     4s     5s     6s     7s     8s     9s       |
+| Audio: bark     [  ]   [██]   [██]   [██]   [  ]   [██]   [██]   [██]   [██]   [  ]      |
+| Visual: dog     [██]   [██]   [██]   [██]   [██]   [██]   [██]   [██]   [██]   [██]      |
+| Audible & Vis   [  ]   [★★]   [★★]   [★★]   [  ]   [★★]   [★★]   [★★]   [★★]   [  ]      |
++------------------------------------------------------------------------------------------+
+| EXPLAINABILITY & COUNTERFACTUAL DIAGNOSTICS (Expandable Panel)                           |
+| * Modality Attribution: Audio Branch 91% | Visual Branch 86% | Fused Confidence 95%      |
+| * Second-by-Second Cosine Similarity Trajectory                                          |
+| * Semantic Dissonance Diagnostic (Edge Case Explanations)                                |
++------------------------------------------------------------------------------------------+
 ```
 
-### 9.3 Webcam + Microphone Mode (Stretch Goal)
+---
 
-**Demoted from live Streamlit feature to pre-recorded demonstration clip.**
+### 9.2 Per-Head Explainability Suite
 
-Rationale: Live microphone capture in Streamlit is unreliable, carries no marks, and risks the graded deliverables. Instead, a short screen capture of the pipeline running on self-recorded clips will be produced if the core system finishes early.
+#### 1. Head 1 Explainability: Event Classification
+* **Top-5 Probability Distribution & Margin:** An expandable drawer displays a horizontal bar chart of the top-5 predicted classes with softmax probabilities. The margin between Rank-1 and Rank-2 clearly explains whether the prediction is robust or ambiguous.
+* **Modality Attribution (Audio vs. Visual vs. Fused):** Displays unimodal predictions alongside the fused decision:
+  * Audio Branch: `Dog bark (0.91)`
+  * Visual Branch: `Dog (0.86)`
+  * Fused Head: `Dog bark (0.95)`
+  * *Explains whether the final event decision was audio-led, vision-led, or mutually reinforced.*
+
+#### 2. Head 2 Explainability: Per-Second Temporal Presence & Background Detection
+* **3-Track Co-Presence Evidence Matrix:**
+  * **Track 1 (`Audio: <sound>`):** Visualizes which seconds contain the audible sound pattern.
+  * **Track 2 (`Visual: <source>`):** Visualizes which seconds contain the visual candidate source.
+  * **Track 3 (`Audible & visible`):** Visualizes the joint intersection representing active audio-visual event seconds.
+* **"Why is this second Background?" Diagnostics:**
+  * Directly clarifies the nature of non-event seconds:
+    * *Example at Second 0 & 4:* Visual source is present, but audio is silent $\implies$ classified as **Background** because an event requires joint occurrence.
+    * *Example at Second 9:* Audio echo is audible, but visual object has moved off-frame $\implies$ classified as **Background**.
+* **Synchronized Frame Filmstrip:** Displays the 10 sampled frames (1 fps) directly aligned above each timestamp block. Clicking any second seeks the video or highlights that specific frame.
+
+#### 3. Head 3 Explainability: Cross-Modal Correspondence Verification
+* **Calibrated Decision Gauge:**
+  * Rather than outputting an uncalibrated raw score, a horizontal gauge displays the score needle relative to empirical validation thresholds:
+    * `[0.00 – τ_lower)`: 🔴 **Mismatch**
+    * `[τ_lower – τ_upper]`: 🟡 **Weak / Uncertain**
+    * `(τ_upper – 1.00]`: 🟢 **Strong Match**
+* **Second-by-Second Cosine Similarity Trajectory:**
+  * A continuous line graph plotting the alignment $\cos(\mathbf{z}_a^t, \mathbf{z}_v^t)$ across $t=0\dots9\,\text{s}$, pinpointing the exact moments where multimodal alignment peaks or dips.
+
+---
+
+### 9.3 Counterfactual Sandbox: "Swap the Audio" Feature
+The primary interactive feature of the demo is the **"Swap Audio" button**:
+1. When clicked, the application replaces the clip's soundtrack with an unrelated audio track (e.g., *siren*) or a semantically tricky audio track (e.g., *banjo* on a *guitar* video).
+2. The user watches the entire dashboard update dynamically:
+   * `Audio` track updates to the swapped class.
+   * `Audible & visible` joint track completely empties out.
+   * `Correspondence Score` drops from `0.91` to `0.14`.
+   * `Decision Pill` flips from 🟢 **STRONG MATCH** to 🔴 **MISMATCH**.
+3. **The Counterfactual Explanation:** The system explicitly notes: *"Correspondence collapsed because acoustic embeddings of the swapped sound do not project into the visual subspace of the on-screen subject."*
+
+---
+
+### 9.4 Semantic Dissonance Diagnostics for Edge Cases
+For complex real-world scenes, the UI provides context-aware diagnostic alert cards:
+
+| Edge Case | UI Diagnostic Output |
+| :--- | :--- |
+| **Imitation** (e.g., human barking like a dog) | 🟡 **Weak/Uncertain:** Acoustic features strongly match *Dog Bark (91%)*, but visual features detect *Person (96%)*. Low correspondence is due to cross-modal semantic dissonance, **not** audio classification failure. |
+| **Off-screen sound** (e.g., siren heard while viewing a park) | 🔴 **Mismatch:** Sound *Siren (94%)* is clearly detected, but no corresponding vehicle exists in frame across all 10 seconds. |
+| **Multiple visible objects** (e.g., dog and car in frame, car horn sounds) | 🟢 **Strong Match:** Multiple candidate sources detected. Attention weights confirm dominant alignment with the *Car* region ($87\%$). |
+
+---
+
+### 9.5 Streamlit Implementation Blueprint
+* **Layout:** Built using responsive `st.columns([3, 2])` for the video player and decision card, and full-width `st.container()` for the temporal evidence grid.
+* **Badges & Grid:** Implemented with lightweight custom CSS flexboxes for smooth rendering of the 10-second timeline blocks.
+* **Plots:** Interactive Plotly charts for the Top-5 probability distribution and temporal similarity trajectories.
+* **Latency Management:** Caching encoder feature extraction (`@st.cache_data`) ensures instant response times when toggling between original and audio-swapped counterfactuals.
+
+---
+
+### 9.6 Webcam + Microphone Mode (Stretch Goal)
+**Demoted from live Streamlit feature to pre-recorded demonstration clip.**  
+*Rationale:* Live microphone/webcam capture in Streamlit introduces driver issues, audio buffer lag, and browser permission hurdles that carry zero grading marks. If time permits after model freeze (20 Oct), a clean screen recording of the pipeline processing locally captured clips will be included as supplementary demo material.
+
 
 ---
 

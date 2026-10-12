@@ -37,6 +37,19 @@ st.markdown("""
         border-radius: 4px;
         font-family: monospace;
     }
+    .demo-pill {
+        display: inline-block;
+        background-color: #d97706;
+        color: #ffffff;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        margin-left: 8px;
+        vertical-align: middle;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -50,6 +63,14 @@ ave_index = get_ave_index()
 # Header
 st.title("🎬 AValidate: Intelligent Audio-Visual Source Matching")
 st.markdown("*Does what you hear make sense given what you see?*")
+
+# PROMINENT DEMO DISCLAIMER BANNER
+st.warning(
+    "⚠️ **PROTOTYPE DEMO MODE — PLACEHOLDER OUTPUTS**\n\n"
+    "Trained neural network models are currently being trained and integrated. All predictions, confidence numbers, "
+    "temporal presence grids, and correspondence scores displayed below are **simulated / placeholder outputs** "
+    "for interactive UI demonstration only. **Please do not mistake these numbers for experimental results.**"
+)
 
 # Top Selection: Upload or Sample Video
 col_mode1, col_mode2 = st.columns([1, 1])
@@ -106,7 +127,8 @@ if selected_video_path and os.path.exists(selected_video_path):
             st.error("🔴 **Audio Swapped:** Testing system behavior under cross-modal mismatch.")
 
     with col_decision:
-        st.markdown("### DECISION")
+        st.markdown("### DECISION <span class='demo-pill'>DEMO MOCK</span>", unsafe_allow_html=True)
+        st.caption("⚠️ *Results below are simulated heuristics pending trained model integration.*")
         
         # Decision Badge
         if result.correspondence_band == "Strong Match":
@@ -149,7 +171,8 @@ if selected_video_path and os.path.exists(selected_video_path):
     st.divider()
 
     # Lower Deck: Per-Second Evidence (10-Second Temporal Localization)
-    st.markdown("### PER-SECOND EVIDENCE (10-Second Temporal Localization)")
+    st.markdown("### PER-SECOND EVIDENCE (10-Second Temporal Localization) <span class='demo-pill'>DEMO TRACKS</span>", unsafe_allow_html=True)
+    st.caption("⚠️ *Tracks below display prototype visualization layout with mock temporal evidence.*")
 
     # 1. Ten Sampled Frames Filmstrip
     cols_thumb = st.columns(10)
@@ -186,6 +209,7 @@ if selected_video_path and os.path.exists(selected_video_path):
 
     # Explainability & Diagnostic Drawer
     with st.expander("🔍 Deep Explainability & Trajectory Analysis"):
+        st.caption("ℹ️ *Trajectories and attribution percentages are currently prototype mock data.*")
         st.markdown("#### 1. Second-by-Second Cosine Similarity Trajectory")
         fig_traj = go.Figure()
         fig_traj.add_trace(go.Scatter(

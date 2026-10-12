@@ -30,6 +30,7 @@ class PipelineOutput:
     modality_attribution: Dict[str, float]
     is_benchmark_sample: bool
     is_swapped_test: bool
+    is_mock_demo: bool = True
 
 class AValidatePipeline:
     def __init__(self):
@@ -63,5 +64,6 @@ class AValidatePipeline:
             similarity_trajectory=fusion_out["similarity_trajectory"],
             modality_attribution=fusion_out["attribution"],
             is_benchmark_sample=vision_out["is_benchmark_sample"],
-            is_swapped_test=swap_audio_test
+            is_swapped_test=swap_audio_test,
+            is_mock_demo=True
         )

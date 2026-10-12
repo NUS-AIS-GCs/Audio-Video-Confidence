@@ -18,3 +18,14 @@ Documentations/project_proposal_report.md
 
 # personal notes
 Documentations/ReferencePromptsSwaraj.txt
+
+# Local data, caches, checkpoints, and embeddings never go in git
+_local/
+work/
+artifacts/
+cache/
+embeddings/
+*.npy
+*.pt
+*.wav
+.ipynb_checkpoints/

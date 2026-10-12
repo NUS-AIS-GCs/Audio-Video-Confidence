@@ -1,7 +1,7 @@
 """Train the log-Mel CNN baseline. Best checkpoint (by val per-second macro-F1) goes to Drive.
 
 Sanity check first:  python -m audio.train --overfit 32 --epochs 40 --run-id overfit
-Full run:           python -m audio.train --run-id cnn_v2 --balance sqrt --wandb
+Full run:           python -m audio.train --run-id cnn_v4 --wandb   (defaults = baseline settings)
 """
 import argparse
 import json
@@ -38,14 +38,14 @@ def class_weights(y: np.ndarray, mode: str) -> torch.Tensor:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-id", required=True)
-    ap.add_argument("--epochs", type=int, default=60)
+    ap.add_argument("--epochs", type=int, default=30)
     ap.add_argument("--batch", type=int, default=64)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--wd", type=float, default=1e-4)
-    ap.add_argument("--patience", type=int, default=10)
+    ap.add_argument("--patience", type=int, default=30, help="epochs without val improvement before stopping; = epochs means never")
     ap.add_argument("--emb-dim", type=int, default=256)
     ap.add_argument("--workers", type=int, default=2)
-    ap.add_argument("--balance", choices=["none", "sqrt"], default="none", help="class-weighted loss")
+    ap.add_argument("--balance", choices=["none", "sqrt"], default="sqrt", help="class-weighted loss (baseline cnn_v4 uses sqrt)")
     ap.add_argument("--wandb", action="store_true", help="log to Weights & Biases")
     ap.add_argument("--overfit", type=int, default=0, help="train and validate on the first N training clips, no augmentation")
     a = ap.parse_args()

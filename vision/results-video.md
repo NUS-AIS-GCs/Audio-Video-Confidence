@@ -5,7 +5,8 @@ Per-second metrics use AVE's 29 labels (28 events + background); clip metrics us
 
 | Run | Date | Samples (train/val/test) | Settings | Test clip acc | Test clip macro-F1 | Test sec acc | Test sec macro-F1 | Notes |
 |---|---|---|---|---|---|---|---|---|
-| vision_v1 (planned) | 2026-10-13 | 3339 / 402 / 402 | ResNet-18 pretrained, 30 epochs cosine, `--balance sqrt` | TBD | TBD | TBD | TBD | Official vision baseline candidate. Aligned with audio baseline cnn_v4. |
+| vision_local_v1 | 2026-10-13 | 3339 / 402 / 402 | MobileNet-V3 Small pretrained, 10 ep, batch 8, lr 5e-4, `--balance sqrt` | 71.9% | 71.2% | 58.6% | 61.5% | Local Intel Arc 140V XPU baseline. Fast & lightweight. |
+| resnet18_v1 (planned) | 2026-10-13 | 3339 / 402 / 402 | ResNet-18 pretrained, 10 ep cosine, `--balance sqrt` | TBD | TBD | TBD | TBD | Official ResNet-18 benchmark. |
 
 ## Baseline Architecture & Contract
 - **Input**: 10 aligned frames per 10-second clip (1 fps), resized to 224x224 RGB.

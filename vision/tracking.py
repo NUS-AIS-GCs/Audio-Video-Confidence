@@ -21,12 +21,24 @@ class Tracker:
             raise SystemExit("W&B: set WANDB_ENTITY to your wandb.ai username or team (the name in wandb.ai/<name>), "
                              "e.g. os.environ['WANDB_ENTITY'] = 'yourname', or run without --wandb.")
         kwargs = dict(project=PROJECT, entity=ENTITY, group="vision", tags=["vision", "baseline"])
-        print(f"W&B: logging to {ENTITY}/{PROJECT}")
         if resume and id_file.exists():
-            self.run = wandb.init(id=id_file.read_text().strip(), resume="allow", **kwargs)
+            existing_id = id_file.read_text().strip()
+            try:
+                self.run = wandb.init(id=existing_id, resume="allow", **kwargs)
+            except Exception as e:
+                print(f"W&B: notice: could not resume run '{existing_id}' ({e}). Initializing clean evaluation run.")
+                try:
+                    self.run = wandb.init(name=f"{run_id}_eval", config=config, **kwargs)
+                except Exception as e2:
+                    print(f"W&B: notice: could not initialize fallback W&B run ({e2}). Proceeding without W&B.")
+                    self.run = None
         else:
-            self.run = wandb.init(name=run_id, config=config, **kwargs)
-            id_file.write_text(self.run.id)
+            try:
+                self.run = wandb.init(name=run_id, config=config, **kwargs)
+                id_file.write_text(self.run.id)
+            except Exception as e:
+                print(f"W&B: notice: could not initialize W&B run ({e}). Proceeding without W&B.")
+                self.run = None
 
     def log(self, data: dict, step: int = None) -> None:
         if self.run:

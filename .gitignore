@@ -1,13 +1,10 @@
 .venv
-**/__pycache__/
-**/__pycache__
+*.env
+**/__pycache__/**
+
 
 AVE_Dataset.zip
 AVE_Dataset
-AVE-ECCV18
-# pre_trained_encoders
-pre_trained_encoders/visual_feature.h5
-
 
 Documentations/1_Audio_Visual_Sound_Source_Verification_Team_Report.docx
 Documentations/2_AV_SoundSource_Report_v2_REVISED-2.docx
@@ -20,6 +17,7 @@ Documentations/project_proposal_report.md
 Documentations/ReferencePromptsSwaraj.txt
 
 # Local data, caches, checkpoints, and embeddings never go in git
+wandb
 _local/
 work/
 artifacts/
@@ -28,4 +26,4 @@ embeddings/
 *.npy
 *.pt
 *.wav
-.ipynb_checkpoints/
+.ipynb_checkpoints/

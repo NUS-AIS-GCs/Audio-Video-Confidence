@@ -57,17 +57,26 @@ from vision.tracking import Tracker
 def pick_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        return torch.device("xpu")
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
 
 
 @torch.no_grad()
-def predict(model, loader, device):
+def predict(model, loader, device, desc: str = None):
     """Returns per-second probabilities (N,10,29), labels (N,10), clip labels (N,), embeddings (N,10,D)."""
     model.eval()
     P, Y, YC, E = [], [], [], []
-    for x, y, yc in loader:
+    iterator = loader
+    if desc and len(loader) > 1:
+        try:
+            from tqdm.auto import tqdm
+            iterator = tqdm(loader, desc=desc, leave=False, dynamic_ncols=True)
+        except ImportError:
+            pass
+    for x, y, yc in iterator:
         logits, emb = model(x.to(device))
         P.append(torch.softmax(logits.float(), -1).cpu())
         E.append(emb.float().cpu())
@@ -148,10 +157,12 @@ def main() -> None:
             save_confusion(YC, P[:, :, : C.N_EVENTS].mean(1).argmax(-1), names, run_dir / "confusion_test.png")
 
     (run_dir / "results.json").write_text(json.dumps(results, indent=2))
-    tracker = Tracker(a.wandb, run_dir, a.run_id, resume=True)
-    tracker.summary({f"{s}_{k}": v for s, m in results.items() for k, v in m.items()})
-    tracker.image("confusion_test", run_dir / "confusion_test.png")
-    tracker.finish()
+    try:
+        tracker = Tracker(a.wandb, run_dir, a.run_id, resume=True)
+        tracker.summary({f"{s}_{k}": v for s, m in results.items() for k, v in m.items()})
+        tracker.image("confusion_test", run_dir / "confusion_test.png")
+    finally:
+        tracker.finish()
     print(json.dumps(results, indent=2))
 
 

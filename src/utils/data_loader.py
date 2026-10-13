@@ -1,4 +1,9 @@
-"""Data loader and metadata indexing for the AVE Dataset and pre-computed features."""
+"""
+Data loader and metadata indexing for the AVE Dataset and pre-computed features.
+NOTE: In the current prototype demo phase, AVEIndex is used by the placeholder
+inference pipeline (src/models/vision.py, audio.py, pipeline.py) to look up
+ground-truth labels and temporal presence from Annotations.txt.
+"""
 import h5py
 import numpy as np
 from typing import Dict, Optional, Tuple, List
@@ -11,6 +16,11 @@ from src.config import (
 )
 
 class AVEIndex:
+    """
+    Singleton indexing class that parses AVE Annotations.txt into memory.
+    Currently used by the placeholder UI pipeline to retrieve ground-truth categories
+    and [start_time, end_time] intervals for interactive demonstration.
+    """
     _instance = None
 
     def __init__(self):

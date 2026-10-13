@@ -64,12 +64,14 @@ ave_index = get_ave_index()
 st.title("🎬 AValidate: Intelligent Audio-Visual Source Matching")
 st.markdown("*Does what you hear make sense given what you see?*")
 
-# PROMINENT DEMO DISCLAIMER BANNER
-st.warning(
-    "⚠️ **PROTOTYPE DEMO MODE — PLACEHOLDER OUTPUTS**\n\n"
-    "Trained neural network models are currently being trained and integrated. All predictions, confidence numbers, "
-    "temporal presence grids, and correspondence scores displayed below are **simulated / placeholder outputs** "
-    "for interactive UI demonstration only. **Please do not mistake these numbers for experimental results.**"
+# PROMINENT PLACEHOLDER DISCLAIMER BANNER
+st.error(
+    "⚠️ **PLACEHOLDER OUTPUTS — ANNOTATION LOOKUP MODE**\n\n"
+    "**Notice for evaluators and team members:** This web application currently displays **placeholder outputs** by "
+    "reading ground-truth event labels and temporal intervals directly from **AVE dataset annotations (`Annotations.txt`)**, "
+    "**NOT from trained neural network checkpoints**.\n\n"
+    "Trained models (Vision ResNet-18 / MobileNet-V3, Audio Log-Mel CNN, and Multimodal Fusion heads) are currently being evaluated "
+    "in the experimentation pipeline (`vision/` and `notebooks/`) and will be wired into this inference interface in the upcoming integration phase."
 )
 
 # Top Selection: Upload or Sample Video
@@ -127,8 +129,8 @@ if selected_video_path and os.path.exists(selected_video_path):
             st.error("🔴 **Audio Swapped:** Testing system behavior under cross-modal mismatch.")
 
     with col_decision:
-        st.markdown("### DECISION <span class='demo-pill'>DEMO MOCK</span>", unsafe_allow_html=True)
-        st.caption("⚠️ *Results below are simulated heuristics pending trained model integration.*")
+        st.markdown("### DECISION <span class='demo-pill'>PLACEHOLDER: ANNOTATION LOOKUP</span>", unsafe_allow_html=True)
+        st.caption("⚠️ **Notice:** This decision is a **placeholder lookup** read directly from AVE `Annotations.txt` (not a live neural network checkpoint).")
         
         # Decision Badge
         if result.correspondence_band == "Strong Match":
@@ -139,8 +141,8 @@ if selected_video_path and os.path.exists(selected_video_path):
             st.error("## 🔴 MISMATCH")
 
         # Large Metric Typography
-        st.markdown(f"## **{result.correspondence_score:.2f}** <span style='font-size:18px; color:gray;'>correspondence score</span>", unsafe_allow_html=True)
-        st.markdown(f"**Predicted Event:** `{result.predicted_event}` (Confidence: {result.event_confidence * 100:.1f}%)")
+        st.markdown(f"## **{result.correspondence_score:.2f}** <span style='font-size:18px; color:gray;'>correspondence score (simulated)</span>", unsafe_allow_html=True)
+        st.markdown(f"**Event (from Annotations.txt):** `{result.predicted_event}` (Simulated confidence: {result.event_confidence * 100:.1f}%)")
 
         # Confidence Bands Legend
         with st.expander("Confidence Bands Legend (Validation Calibrated)", expanded=True):
@@ -152,7 +154,8 @@ if selected_video_path and os.path.exists(selected_video_path):
             """)
 
         # Top-5 Predicted Distribution Drawer
-        with st.expander("Top-5 Predicted Classes (Head 1)"):
+        with st.expander("Top-5 Predicted Classes (Head 1 — Simulated Distribution)"):
+            st.caption("ℹ️ *Distribution simulated around ground-truth annotation category.*")
             df_top5 = pd.DataFrame(result.top5_classes)
             fig_bar = go.Figure(go.Bar(
                 x=df_top5["prob"],
@@ -171,8 +174,8 @@ if selected_video_path and os.path.exists(selected_video_path):
     st.divider()
 
     # Lower Deck: Per-Second Evidence (10-Second Temporal Localization)
-    st.markdown("### PER-SECOND EVIDENCE (10-Second Temporal Localization) <span class='demo-pill'>DEMO TRACKS</span>", unsafe_allow_html=True)
-    st.caption("⚠️ *Tracks below display prototype visualization layout with mock temporal evidence.*")
+    st.markdown("### PER-SECOND EVIDENCE (10-Second Temporal Localization) <span class='demo-pill'>PLACEHOLDER: ANNOTATION INTERVALS</span>", unsafe_allow_html=True)
+    st.caption("⚠️ **Notice:** Temporal presence tracks below are constructed directly from the ground-truth interval `[StartTime, EndTime]` in `Annotations.txt`.")
 
     # 1. Ten Sampled Frames Filmstrip
     cols_thumb = st.columns(10)
@@ -209,7 +212,7 @@ if selected_video_path and os.path.exists(selected_video_path):
 
     # Explainability & Diagnostic Drawer
     with st.expander("🔍 Deep Explainability & Trajectory Analysis"):
-        st.caption("ℹ️ *Trajectories and attribution percentages are currently prototype mock data.*")
+        st.caption("ℹ️ **Placeholder metrics:** Trajectories and attribution scores are simulated heuristics pending integration of trained multimodal fusion checkpoints.")
         st.markdown("#### 1. Second-by-Second Cosine Similarity Trajectory")
         fig_traj = go.Figure()
         fig_traj.add_trace(go.Scatter(

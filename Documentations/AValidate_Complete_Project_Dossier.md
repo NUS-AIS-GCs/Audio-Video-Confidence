@@ -506,9 +506,9 @@ For complex real-world scenes, the UI provides context-aware diagnostic alert ca
 
 | Member | Model Work | App Work | Man-days |
 |--------|-----------|----------|----------|
-| **Ghanashyam** | BEATs + LoRA audio encoder, cross-modal attention fusion, three output heads, LoRA rank ablation | Inference layer: checkpoint loading, `predict()` entry point, latency/caching | 10 |
-| **Member 2 (Swaraj)** | CLIP ViT + LoRA visual branch, visual-only baseline, robustness experiments | Front end: upload flow, video player, frame strip, per-second timeline, swap-audio button | 10 |
-| **Member 3 (Veeramani)** | AVE pipeline and match/mismatch pair generator, audio CNN baseline, evaluation harness, ablation runs | Results view: metrics and confusion matrices in the app, packaging, demo recording | 10 |
+| **Veeramani (Venkat)** | Multimodal fusion (cross-modal attention & concat MLP), three output heads (event class, joint presence, correspondence verification), match/mismatch pair generator, correspondence threshold calibration | Results view: metrics and confusion matrices in the app, decision threshold display, packaging, demo recording | 10 |
+| **Ghanashyam** | Audio CNN baseline (`cnn_v1`–`cnn_v4`), BEATs + LoRA audio encoder, audio data preprocessing, class weighting & audio ablations | Audio inference layer: audio feature caching, audio-swap counterfactual test backend, latency/caching | 10 |
+| **Swaraj** | Vision pipeline: ResNet-18 benchmark, MobileNet-V3 Small baseline & ablations, CLIP ViT visual branch, 1 fps frame extraction, Intel XPU acceleration | Front end: Streamlit UI architecture, upload flow, video player, filmstrip preview, per-second timeline, counterfactual UI toggle | 10 |
 | **All** | Report, presentations, video, individual reports and peer review | (within the above) | — |
 
 ### 10.2 Design Principle
@@ -517,7 +517,10 @@ Every member:
 - **Trains** a model component (so everyone has model work for the individual reflection report)
 - **Owns** a slice of the Streamlit app (so no one is just "the app person")
 
-The audio branch is paired with the fusion module because that is where most of the architecture work sits.
+Role specialization aligned with Proposal V3:
+- **Venkat** owns the Multimodal Fusion module, pair generation, and the three prediction heads (where the core audio-visual correspondence reasoning occurs).
+- **Ghanashyam** owns the Audio modality pipeline (Log-Mel CNN baseline and BEATs encoder representations).
+- **Swaraj** owns the Vision modality pipeline (frame extraction, ResNet/MobileNet/CLIP backbones) and the interactive Streamlit user interface.
 
 ---
 

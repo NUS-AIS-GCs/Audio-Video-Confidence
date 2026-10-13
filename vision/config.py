@@ -21,7 +21,17 @@ WORK_ROOT = Path(os.environ.get(
 ZIP_ON_DRIVE = DRIVE_ROOT / "data" / "AVE_Dataset.zip"
 FEATURE_DIR = DRIVE_ROOT / "cache" / "vision_features_v1"
 ARTIFACT_DIR = DRIVE_ROOT / "artifacts" / "vision_baseline"
-EMBED_DIR = DRIVE_ROOT / "embeddings" / "vision_baseline_v1"
+EMBED_DIR = DRIVE_ROOT / "embeddings"
+
+
+def get_run_dir(run_id: str) -> Path:
+    """Artifact directory for a specific run ID: DRIVE_ROOT/artifacts/vision_baseline/<run_id>"""
+    return ARTIFACT_DIR / run_id
+
+
+def get_embed_dir(run_id: str) -> Path:
+    """Embedding directory for a specific run ID: DRIVE_ROOT/embeddings/<run_id>"""
+    return EMBED_DIR / run_id
 
 # Scratch / Local dataset root
 # Prefer local repo copy if present, otherwise fallback to WORK_ROOT

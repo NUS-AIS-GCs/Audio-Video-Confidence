@@ -143,7 +143,7 @@ def main() -> None:
     ap.add_argument("--wandb", action="store_true", help="add test results to the training run in W&B")
     a = ap.parse_args()
 
-    run_dir = C.ARTIFACT_DIR / a.run_id
+    run_dir = C.get_run_dir(a.run_id)
     device = pick_device()
     model = load_model(run_dir, device)
     names = class_names()

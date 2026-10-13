@@ -57,7 +57,7 @@ def main() -> None:
 
     seed_all(C.SEED)
     device = pick_device()
-    run_dir = C.ARTIFACT_DIR / a.run_id
+    run_dir = C.get_run_dir(a.run_id)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     if a.overfit:

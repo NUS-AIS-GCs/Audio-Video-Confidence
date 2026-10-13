@@ -28,8 +28,8 @@ def main() -> None:
     a = ap.parse_args()
 
     device = pick_device()
-    model = load_model(C.ARTIFACT_DIR / a.run_id, device)
-    out_dir = a.out_dir if a.out_dir is not None else (C.DRIVE_ROOT / "embeddings" / a.run_id)
+    model = load_model(C.get_run_dir(a.run_id), device)
+    out_dir = a.out_dir if a.out_dir is not None else C.get_embed_dir(a.run_id)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for split in C.SPLITS:

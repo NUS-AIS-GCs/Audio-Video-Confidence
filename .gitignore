@@ -27,3 +27,5 @@ embeddings/
 *.pt
 *.wav
 .ipynb_checkpoints/
+
+notebooks\01_audio_baseline.ipynb

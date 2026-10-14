@@ -14,8 +14,8 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from torch.utils.data import DataLoader
 
 from audio import config as C
-from audio.dataset import AVEAudio, norm_stats
-from audio.model import AudioCNN
+from audio.dataset import AVEAudio, feature_dir, norm_stats
+from audio.model import build_model
 from audio.tracking import Tracker
 
 
@@ -51,7 +51,7 @@ def metrics(P: np.ndarray, Y: np.ndarray, YC: np.ndarray) -> dict:
     }
 
 
-def save_confusion(YC, clip_pred, names, path):
+def save_confusion(YC, clip_pred, names, path, title="Audio"):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -61,15 +61,17 @@ def save_confusion(YC, clip_pred, names, path):
     ax.set_xticks(range(C.N_EVENTS)); ax.set_xticklabels(names, rotation=90, fontsize=7)
     ax.set_yticks(range(C.N_EVENTS)); ax.set_yticklabels(names, fontsize=7)
     ax.set_xlabel("Predicted"); ax.set_ylabel("True")
-    ax.set_title("Audio baseline: clip-level confusion (test, row-normalised)")
+    ax.set_title(f"{title}: clip-level confusion (test, row-normalised)")
     fig.tight_layout(); fig.savefig(path, dpi=150); plt.close(fig)
 
 
 def load_model(run_dir, device):
+    """Best checkpoint of a run -> (model, its feature cache folder). Older CNN checkpoints default to log-Mel."""
     ckpt = torch.load(run_dir / "best.pt", map_location=device)
-    model = AudioCNN(emb_dim=ckpt["config"]["emb_dim"]).to(device)
+    cfg = {"kind": "cnn", **ckpt["config"]}
+    model = build_model(cfg).to(device)
     model.load_state_dict(ckpt["model"])
-    return model
+    return model, feature_dir(cfg.get("features"))
 
 
 def main() -> None:
@@ -80,14 +82,14 @@ def main() -> None:
     a = ap.parse_args()
     run_dir = C.ARTIFACT_DIR / a.run_id
     device = pick_device()
-    model = load_model(run_dir, device)
-    names = norm_stats()[2]
+    model, fdir = load_model(run_dir, device)
+    names = norm_stats(fdir)[2]
     results = {}
     for split in ("val", "test"):
-        P, Y, YC, _ = predict(model, DataLoader(AVEAudio(split), batch_size=a.batch), device)
+        P, Y, YC, _ = predict(model, DataLoader(AVEAudio(split, fdir=fdir), batch_size=a.batch), device)
         results[split] = metrics(P, Y, YC)
         if split == "test":
-            save_confusion(YC, P[:, :, : C.N_EVENTS].mean(1).argmax(-1), names, run_dir / "confusion_test.png")
+            save_confusion(YC, P[:, :, : C.N_EVENTS].mean(1).argmax(-1), names, run_dir / "confusion_test.png", title=a.run_id)
     (run_dir / "results.json").write_text(json.dumps(results, indent=2))
     tracker = Tracker(a.wandb, run_dir, a.run_id, resume=True)
     tracker.summary({f"{s}_{k}": v for s, m in results.items() for k, v in m.items()})

@@ -12,12 +12,14 @@ Documentations/3_AValidate_Technique_Mapping.docx
 Documentations/PRS-Proporsal_V1.docx
 Documentations/PRS-Proporsal_V3.docx
 Documentations/project_proposal_report.md
+Documentations/~$Group 25 - AValidate - Proposal Presentation.pptx
 
 # personal notes
 Documentations/ReferencePromptsSwaraj.txt
 
 # Local data, caches, checkpoints, and embeddings never go in git
 wandb
+# Audio branch: data and outputs never go in git
 _local/
 work/
 artifacts/
@@ -26,4 +28,8 @@ embeddings/
 *.npy
 *.pt
 *.wav
+*.npy
+*.pt
+*.wav
+__pycache__/
 .ipynb_checkpoints/

@@ -1,3 +1,8 @@
+.venv
+*.env
+**/__pycache__/**
+
+
 AVE_Dataset.zip
 AVE_Dataset
 Pre-trained_Encoders
@@ -14,6 +19,8 @@ Documentations/~$Group 25 - AValidate - Proposal Presentation.pptx
 # personal notes
 Documentations/ReferencePromptsSwaraj.txt
 
+# Local data, caches, checkpoints, and embeddings never go in git
+wandb
 # Audio branch: data and outputs never go in git
 _local/
 work/
@@ -22,5 +29,11 @@ cache/
 *.npy
 *.pt
 *.wav
+*.npy
+*.pt
+*.wav
 __pycache__/
 .ipynb_checkpoints/
+
+embeddings/
+wandb

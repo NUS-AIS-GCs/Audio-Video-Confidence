@@ -91,9 +91,12 @@ def embed_split(model, split: str, out_dir, device, batch: int) -> None:
     ids = df["clip_id"].tolist()
     for i in tqdm(range(0, len(ids), batch), desc=f"BEATs {split}"):
         wav = torch.from_numpy(np.stack([load_wav(C.WAV_DIR / f"{c}.wav") for c in ids[i:i + batch]])).to(device)
-        with torch.autocast("cuda", dtype=torch.float16, enabled=device.type == "cuda"):
-            tokens, _ = model.extract_features(wav, padding_mask=torch.zeros_like(wav, dtype=torch.bool))
+        # Full float32 on purpose: BEATs scales audio to +-32768 before its filterbank, and the squared
+        # values overflow float16 (max 65504) -> inf -> NaN embeddings. Don't wrap this in autocast.
+        tokens, _ = model.extract_features(wav, padding_mask=torch.zeros_like(wav, dtype=torch.bool))
         X[i:i + len(wav)] = pool_to_seconds(tokens.float()).cpu().numpy()
+    if not np.isfinite(X).all():
+        raise SystemExit(f"{split}: BEATs produced non-finite values ({(~np.isfinite(X)).sum()} entries); not saving.")
     np.save(out_dir / f"{split}_X.npy", X)
     save_labels(df, split, out_dir)
     print(f"{split}: X {X.shape}")
@@ -109,7 +112,10 @@ def main() -> None:
     device = pick_device()
     out_dir = C.CACHE_ROOT / f"beats_{a.ckpt}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    todo = [s for s in C.SPLITS if a.force or not (out_dir / f"{s}_X.npy").exists()]
+    def usable(split):   # cached and free of NaN/inf (earlier float16 runs left broken caches)
+        p = out_dir / f"{split}_X.npy"
+        return p.exists() and np.isfinite(np.load(p, mmap_mode="r")).all()
+    todo = [s for s in C.SPLITS if a.force or not usable(s)]
     if todo:
         model = load_beats(a.ckpt, device)
         for split in todo:

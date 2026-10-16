@@ -97,6 +97,9 @@ def main() -> None:
             scaler.scale(loss).backward(); scaler.step(opt); scaler.update()
             total += loss.item() * len(x); n += len(x)
         sched.step()
+        if not np.isfinite(total / n):
+            raise SystemExit(f"Training loss is NaN/inf at epoch {epoch}: the input features likely contain NaN/inf. "
+                             f"Check {fdir} (re-run the feature/extraction step).")
         m = metrics(*predict(model, val_dl, device)[:3])
         history.append({"epoch": epoch, "train_loss": total / n, **{f"val_{k}": v for k, v in m.items() if k != "n_clips"}})
         print(f"ep {epoch:02d} loss {total / n:.3f} | val sec-acc {m['second_accuracy']:.3f} sec-F1 {m['second_macro_f1']:.3f} "

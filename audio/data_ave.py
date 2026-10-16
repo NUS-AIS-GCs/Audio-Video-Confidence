@@ -81,6 +81,9 @@ def ensure_dataset() -> None:
     """Make AVE available under WORK_ROOT: Drive zip -> scratch -> unzip. Downloads once if needed."""
     if C.AVE_ROOT.exists() and any(C.AVE_ROOT.rglob("Annotations.txt")):
         return
+    if C.IN_COLAB and not C.DRIVE_ROOT.parent.exists():
+        raise SystemExit("Google Drive is not mounted. Run the drive.mount('/content/drive') cell first, "
+                         "so the dataset zip saved on Drive is reused instead of downloaded again.")
     C.WORK_ROOT.mkdir(parents=True, exist_ok=True)
     local_zip = C.WORK_ROOT / "AVE_Dataset.zip"
     if not local_zip.exists():

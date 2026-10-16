@@ -14,7 +14,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 from torch.utils.data import DataLoader
 
 from audio import config as C
-from audio.dataset import AVEAudio, feature_dir, norm_stats
+from audio.dataset import feature_dir, make_dataset, norm_stats
 from audio.model import build_model
 from audio.tracking import Tracker
 
@@ -69,8 +69,13 @@ def load_model(run_dir, device):
     """Best checkpoint of a run -> (model, its feature cache folder). Older CNN checkpoints default to log-Mel."""
     ckpt = torch.load(run_dir / "best.pt", map_location=device)
     cfg = {"kind": "cnn", **ckpt["config"]}
-    model = build_model(cfg).to(device)
-    model.load_state_dict(ckpt["model"])
+    model = build_model(cfg, device).to(device)
+    missing, unexpected = model.load_state_dict(ckpt["model"], strict=cfg["kind"] != "beats_lora")
+    if cfg["kind"] == "beats_lora":   # checkpoint holds only LoRA + head; everything missing must be frozen BEATs
+        rebuilt = {"mean", "std"}                                   # normalisation stats come from the cache
+        bad = [k for k in missing if k not in rebuilt and not (k.startswith("beats.") and "lora_" not in k)]
+        assert not unexpected and not bad, (unexpected, bad[:5])
+    model.kind = cfg["kind"]
     return model, feature_dir(cfg.get("features"))
 
 
@@ -86,7 +91,7 @@ def main() -> None:
     names = norm_stats(fdir)[2]
     results = {}
     for split in ("val", "test"):
-        P, Y, YC, _ = predict(model, DataLoader(AVEAudio(split, fdir=fdir), batch_size=a.batch), device)
+        P, Y, YC, _ = predict(model, DataLoader(make_dataset(split, model.kind, fdir), batch_size=a.batch), device)
         results[split] = metrics(P, Y, YC)
         if split == "test":
             save_confusion(YC, P[:, :, : C.N_EVENTS].mean(1).argmax(-1), names, run_dir / "confusion_test.png", title=a.run_id)

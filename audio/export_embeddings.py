@@ -15,7 +15,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 
 from audio import config as C
-from audio.dataset import AVEAudio, norm_stats
+from audio.dataset import make_dataset, norm_stats
 from audio.evaluate import load_model, pick_device, predict
 
 
@@ -28,7 +28,7 @@ def main() -> None:
     out = C.EMBED_ROOT / f"audio_{a.run_id}"
     out.mkdir(parents=True, exist_ok=True)
     for split in C.SPLITS:
-        P, _, _, E = predict(model, DataLoader(AVEAudio(split, fdir=fdir), batch_size=64), device)
+        P, _, _, E = predict(model, DataLoader(make_dataset(split, model.kind, fdir), batch_size=32), device)
         np.save(out / f"{split}_emb.npy", E.astype(np.float16))
         np.save(out / f"{split}_probs.npy", P.astype(np.float16))
         shutil.copy(fdir / f"{split}_ids.csv", out / f"{split}_ids.csv")

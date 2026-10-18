@@ -1,6 +1,6 @@
-# Audio baseline results
+# Audio results
 
-Log-Mel CNN (`audio/model.py`, ~1.18M parameters). Test set = AVE official test split.
+Log-Mel CNN (`AudioCNN`, ~1.18M parameters, trained from scratch) and frozen BEATs + small head (`EmbeddingHead`, ~204k trainable parameters). Test set = AVE official test split.
 Per-second metrics use AVE's 29 labels (28 events + background); clip metrics use 28 events.
 
 | Run | Date | Samples (train/val/test) | Settings | Test clip acc | Test clip macro-F1 | Test sec acc | Test sec macro-F1 | Notes |
@@ -8,7 +8,9 @@ Per-second metrics use AVE's 29 labels (28 events + background); clip metrics us
 | cnn_v1 | 2026-10-07 | 3312 / 401 / 402 | 30 epochs, no class weights, T4 | 0.692 | 0.617 | 0.541 | 0.504 | Keyed by video id: dropped 28 doubly-annotated rows (fixed in v2). Still improving at epoch 30. Never predicts Bus, Cat, Horse. |
 | cnn_v2 | 2026-10-12 | 3339 / 402 / 402 | data fix + `--balance sqrt` + 60-epoch cosine + early stop (patience 10), L4 | 0.600 | 0.541 | 0.473 | 0.443 | Worse than v1. Early-stopped at epoch 24 (best 14) while LR was still high; val scores noisy (±0.07). Class weights did not fix rare classes. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/wcnb9emb) |
 | cnn_v3 | 2026-10-13 | 3339 / 402 / 402 | v1 settings on fixed data: 30 epochs cosine, no class weights, no early stop, L4 | 0.694 | 0.622 | 0.544 | 0.505 | Baseline before cnn_v4. Data fix alone ≈ +0.002–0.005 vs v1. Plateaus from ~epoch 25. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/ok62dlzi) |
-| **cnn_v4** | 2026-10-13 | 3339 / 402 / 402 | cnn_v3 + `--balance sqrt` (only change), L4 | **0.729** | **0.700** | **0.541** | **0.523** | **Official audio baseline** (selected on val per-second macro-F1: 0.521 vs 0.502). Horse and cat now recognised; bus improved. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/ofa7h6sg) |
+| cnn_v4 | 2026-10-13 | 3339 / 402 / 402 | cnn_v3 + `--balance sqrt` (only change), L4 | 0.729 | 0.700 | 0.541 | 0.523 | CNN baseline (selected on val per-second macro-F1: 0.521 vs 0.502). Horse and cat now recognised; bus improved. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/ofa7h6sg) |
+| **beats_iter3_v2** | 2026-10-16 | 3339 / 402 / 402 | frozen BEATs iter3 (self-supervised, never saw AudioSet labels) + head; same loss, sqrt weights, 30 epochs, selection as cnn_v4; T4 | **0.801** | **0.774** | **0.665** | **0.663** | **Official audio result.** +0.14 per-second macro-F1 over cnn_v4. Horse now perfect, cat ~50%, bus still mostly truck. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/3bhzyrod) |
+| beats_as2m_v2 | 2026-10-16 | 3339 / 402 / 402 | as above with BEATs iter3+ AS2M (pre-training used AudioSet labels) | 0.883 | 0.872 | 0.743 | 0.752 | Comparison only: may have seen AVE test clips with labels (AVE ⊂ AudioSet). Gap vs iter3 mixes a stronger encoder with possible label exposure. Val peaks ~epoch 5, then mild overfitting. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/b5vbpsc7) |
 
 ## Observations (cnn_v1)
 - Near-perfect: clock, male speech, ukulele, church bell, chainsaw, frying.
@@ -33,9 +35,17 @@ Per-second metrics use AVE's 29 labels (28 events + background); clip metrics us
 - Selection follows the pre-set rule (best val per-second macro-F1), not test scores. The test gain is larger than the val gain (val clip accuracy is slightly lower: 0.677 vs 0.694), so part of it is noise from a single run on 402 test clips.
 - Exported embeddings (`embeddings/audio_baseline_v2`) come from cnn_v4.
 
+## Observations (frozen BEATs)
+- Only the encoder changed vs cnn_v4 (same loss, class weights, schedule, selection rule), so the gain is the encoder's: +0.124 per-second accuracy, +0.140 per-second macro-F1, +0.072 clip accuracy, +0.074 clip macro-F1 (iter3).
+- Rare classes: horse fully recognised, cat about half (rest predicted as rodents), bus still mostly predicted as truck.
+- Per-second macro-F1 (0.663) now exceeds the vision baseline resnet18_v1 (0.638, vision/results-video.md).
+- beats_as2m_v2 scores higher again, but is reported only as a caveat: AVE clips come from AudioSet and this checkpoint's pre-training used AudioSet labels.
+- First attempt (beats_iter3_v1 / beats_as2m_v1, W&B) failed: embeddings extracted under float16 overflowed to NaN. Fixed by extracting in float32; those runs are invalid.
+- Exported embeddings: `embeddings/audio_beats_iter3_v2/` (N, 10, 256), keyed by sample_id.
+
 ## Next runs
-- Optional: 2 more seeds of cnn_v3 and cnn_v4 to measure run-to-run noise.
-- Frozen BEATs embeddings + the same heads, compared against cnn_v4.
+- BEATs + LoRA (adapt the encoder instead of freezing it), compared against beats_iter3_v2.
+- Optional: extra seeds to measure run-to-run noise.
 
 ## Data notes
 - AVE has 4143 annotations over 4097 videos: 45 videos are annotated twice with different events. From v2, one sample per annotation (`sample_id = clip_id__label`).

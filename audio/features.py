@@ -12,6 +12,7 @@ Run: python -m audio.features
 import json
 
 import numpy as np
+import pandas as pd
 import soundfile as sf
 import torch
 import torchaudio
@@ -41,20 +42,31 @@ def logmel_seconds(wav: np.ndarray) -> np.ndarray:
     return m.reshape(C.N_MELS, C.CLIP_SECONDS, C.FRAMES_PER_SECOND).permute(1, 0, 2).numpy()
 
 
-def build_split(split: str) -> None:
+def split_table(split: str) -> pd.DataFrame:
+    """Samples of a split that have a wav, in the row order every cache uses."""
     df = load_split(split)
     df = df[df["clip_id"].map(lambda c: (C.WAV_DIR / f"{c}.wav").exists())].reset_index(drop=True)
     if df.empty:
         raise RuntimeError(f"No wavs found for split '{split}' in {C.WAV_DIR}. Run `python -m audio.extract_audio` first.")
+    return df
+
+
+def save_labels(df: pd.DataFrame, split: str, out_dir) -> None:
+    """Per-second labels, clip labels and ids next to a feature array (same row order)."""
+    y = np.stack([second_labels(r.start, r.end, r.label) for r in df.itertuples()])
+    np.save(out_dir / f"{split}_y.npy", y)
+    np.save(out_dir / f"{split}_yclip.npy", df["label"].to_numpy(np.int64))
+    df[["sample_id", "clip_id", "category", "start", "end"]].to_csv(out_dir / f"{split}_ids.csv", index=False)
+
+
+def build_split(split: str) -> None:
+    df = split_table(split)
     X = np.zeros((len(df), C.CLIP_SECONDS, C.N_MELS, C.FRAMES_PER_SECOND), dtype=np.float16)
     for i, row in enumerate(tqdm(df.itertuples(), total=len(df), desc=f"log-Mel {split}")):
         X[i] = logmel_seconds(load_wav(C.WAV_DIR / f"{row.clip_id}.wav"))
-    y = np.stack([second_labels(r.start, r.end, r.label) for r in df.itertuples()])
     np.save(C.FEATURE_DIR / f"{split}_X.npy", X)
-    np.save(C.FEATURE_DIR / f"{split}_y.npy", y)
-    np.save(C.FEATURE_DIR / f"{split}_yclip.npy", df["label"].to_numpy(np.int64))
-    df[["sample_id", "clip_id", "category", "start", "end"]].to_csv(C.FEATURE_DIR / f"{split}_ids.csv", index=False)
-    print(f"{split}: X {X.shape}, y {y.shape}")
+    save_labels(df, split, C.FEATURE_DIR)
+    print(f"{split}: X {X.shape}")
 
 
 def main(force: bool = False) -> None:

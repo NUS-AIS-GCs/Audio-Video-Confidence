@@ -1,4 +1,8 @@
-"""Log-Mel CNN baseline: each 1-second spectrogram -> 256-D embedding -> 29 per-second logits."""
+"""Audio models. Both map each second to a 256-D embedding (the team contract) and 29 per-second logits.
+
+  AudioCNN       log-Mel spectrogram, trained from scratch (baseline)
+  EmbeddingHead  frozen pretrained embeddings (e.g. BEATs, 768-D) -> small trainable head
+"""
 import torch
 from torch import nn
 
@@ -29,3 +33,28 @@ class AudioCNN(nn.Module):
     def forward(self, x: torch.Tensor):
         emb = self.embed(x)
         return self.head(emb), emb          # logits (B, 10, 29), emb (B, 10, 256)
+
+
+class EmbeddingHead(nn.Module):
+    """Small head on frozen per-second embeddings. Only this part trains; the encoder stays fixed."""
+
+    def __init__(self, in_dim: int, n_classes: int = C.N_CLASSES, emb_dim: int = 256, dropout: float = 0.3):
+        super().__init__()
+        self.proj = nn.Sequential(nn.Dropout(0.1), nn.Linear(in_dim, emb_dim), nn.GELU())
+        self.head = nn.Sequential(nn.Dropout(dropout), nn.Linear(emb_dim, n_classes))
+        self.emb_dim = emb_dim
+
+    def embed(self, x: torch.Tensor) -> torch.Tensor:
+        """x (B, 10, in_dim) -> (B, 10, emb_dim)."""
+        return self.proj(x)
+
+    def forward(self, x: torch.Tensor):
+        emb = self.embed(x)
+        return self.head(emb), emb
+
+
+def build_model(cfg: dict) -> nn.Module:
+    """cfg from a checkpoint or train.py: {'kind': 'cnn'|'head', 'emb_dim': int, 'in_dim': int (head only)}."""
+    if cfg.get("kind", "cnn") == "cnn":
+        return AudioCNN(emb_dim=cfg["emb_dim"])
+    return EmbeddingHead(in_dim=cfg["in_dim"], emb_dim=cfg["emb_dim"])

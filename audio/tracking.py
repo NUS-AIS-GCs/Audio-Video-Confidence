@@ -12,7 +12,8 @@ ENTITY = os.environ.get("WANDB_ENTITY") or None
 
 
 class Tracker:
-    def __init__(self, enabled: bool, run_dir: Path, run_id: str, config: dict = None, resume: bool = False):
+    def __init__(self, enabled: bool, run_dir: Path, run_id: str, config: dict = None, resume: bool = False,
+                 tags: list = None):
         self.run = None
         if not enabled:
             return
@@ -21,7 +22,7 @@ class Tracker:
         if not ENTITY:
             raise SystemExit("W&B: set WANDB_ENTITY to your wandb.ai username or team (the name in wandb.ai/<name>), "
                              "e.g. os.environ['WANDB_ENTITY'] = 'yourname', or run without --wandb.")
-        kwargs = dict(project=PROJECT, entity=ENTITY, group="audio", tags=["audio", "baseline"])
+        kwargs = dict(project=PROJECT, entity=ENTITY, group="audio", tags=tags or ["audio"])
         print(f"W&B: logging to {ENTITY}/{PROJECT}")
         if resume and id_file.exists():
             self.run = wandb.init(id=id_file.read_text().strip(), resume="allow", **kwargs)

@@ -19,10 +19,12 @@ WORK_ROOT = Path(os.environ.get(
 
 # Persistent
 ZIP_ON_DRIVE = DRIVE_ROOT / "data" / "AVE_Dataset.zip"
+CACHE_ROOT = DRIVE_ROOT / "cache"
 # v2: one sample per AVE annotation row (v1 keyed by video id and dropped 28 rows)
-FEATURE_DIR = DRIVE_ROOT / "cache" / "audio_logmel_v2"
+FEATURE_DIR = CACHE_ROOT / "audio_logmel_v2"       # log-Mel features (CNN baseline)
 ARTIFACT_DIR = DRIVE_ROOT / "artifacts" / "audio_baseline"
-EMBED_DIR = DRIVE_ROOT / "embeddings" / "audio_baseline_v2"
+EMBED_ROOT = DRIVE_ROOT / "embeddings"             # exported per-second embeddings, one folder per run
+PRETRAINED_DIR = DRIVE_ROOT / "pretrained"         # downloaded encoder checkpoints
 
 # Scratch
 AVE_ROOT = WORK_ROOT / "AVE_Dataset"
@@ -46,3 +48,17 @@ BACKGROUND = N_EVENTS            # index 28 = background
 N_CLASSES = N_EVENTS + 1
 SPLITS = ("train", "val", "test")
 SEED = 42
+
+# Pretrained BEATs checkpoints (Microsoft, https://github.com/microsoft/unilm/tree/master/beats).
+# AVE clips come from AudioSet, so what each checkpoint saw during pre-training matters:
+#   iter3       self-supervised only: heard AudioSet audio but never its labels -> main result.
+#               Microsoft only shares it via OneDrive, which blocks scripts: download it manually from
+#               https://1drv.ms/u/s!AqeByhGUtINrgcpxJUNDxg4eU0r-vA?e=qezPJ5 into PRETRAINED_DIR.
+#   iter3_as2m  pre-training also used AudioSet-2M labels -> comparison only (may be optimistic on AVE).
+#               Auto-downloaded from a Hugging Face mirror; two independent mirrors carry the same sha256.
+BEATS = {
+    "iter3": {"glob": "BEATs_iter3*.pt", "exclude": ("plus", "as2m", "as20k", "finetuned", "cpt"), "url": None, "sha256": None},
+    "iter3_as2m": {"glob": "BEATs_iter3_plus_AS2M.pt", "exclude": ("finetuned", "cpt"),
+                   "url": "https://huggingface.co/alibabasglab/beats/resolve/main/BEATs_iter3_plus_AS2M.pt",
+                   "sha256": "d43cbfad4d7b56381c061d7a24774f908d4d94c72961f6eb1d9090ff18cd8d34"},
+}

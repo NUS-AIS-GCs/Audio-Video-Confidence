@@ -53,8 +53,11 @@ class EmbeddingHead(nn.Module):
         return self.head(emb), emb
 
 
-def build_model(cfg: dict) -> nn.Module:
-    """cfg from a checkpoint or train.py: {'kind': 'cnn'|'head', 'emb_dim': int, 'in_dim': int (head only)}."""
+def build_model(cfg: dict, device="cpu") -> nn.Module:
+    """cfg from a checkpoint or train.py: {'kind': 'cnn'|'head'|'beats_lora', 'emb_dim', 'in_dim', ...}."""
     if cfg.get("kind", "cnn") == "cnn":
         return AudioCNN(emb_dim=cfg["emb_dim"])
+    if cfg["kind"] == "beats_lora":
+        from audio.beats_lora import build_beats_lora      # imported lazily: loads the BEATs checkpoint
+        return build_beats_lora(cfg, device)
     return EmbeddingHead(in_dim=cfg["in_dim"], emb_dim=cfg["emb_dim"])

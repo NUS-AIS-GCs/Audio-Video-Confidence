@@ -78,27 +78,47 @@ def second_labels(start: int, end: int, label: int) -> np.ndarray:
 
 
 def ensure_dataset() -> None:
-    """Make AVE available under WORK_ROOT: Drive zip -> scratch -> unzip. Downloads once if needed."""
-    if C.AVE_ROOT.exists() and any(C.AVE_ROOT.rglob("Annotations.txt")):
+    """Make AVE available under WORK_ROOT: Drive zip -> scratch -> unzip. Downloads once if needed.
+
+    Interrupted copies or unzips used to leave a half-finished zip or folder that later runs trusted.
+    Copies now go to a temporary name and are renamed only when complete, a broken zip is deleted and
+    copied again, and a marker file records a finished unzip.
+    """
+    done = C.AVE_ROOT / ".unzip_complete"
+    if done.exists():
         return
     if C.IN_COLAB and not C.DRIVE_ROOT.parent.exists():
         raise SystemExit("Google Drive is not mounted. Run the drive.mount('/content/drive') cell first, "
                          "so the dataset zip saved on Drive is reused instead of downloaded again.")
     C.WORK_ROOT.mkdir(parents=True, exist_ok=True)
     local_zip = C.WORK_ROOT / "AVE_Dataset.zip"
+    if local_zip.exists() and not zipfile.is_zipfile(local_zip):
+        print("Found an incomplete local zip (an earlier copy was interrupted); deleting it.")
+        local_zip.unlink()
     if not local_zip.exists():
+        partial = local_zip.with_suffix(".zip.partial")
         if C.ZIP_ON_DRIVE.exists():
             print(f"Copying zip from Drive: {C.ZIP_ON_DRIVE}")
-            shutil.copy(C.ZIP_ON_DRIVE, local_zip)
+            shutil.copy(C.ZIP_ON_DRIVE, partial)
+            partial.rename(local_zip)
         else:
             print("Downloading AVE from Google Drive (one time)...")
-            subprocess.run([sys.executable, "-m", "gdown", C.AVE_GDRIVE_ID, "-O", str(local_zip)], check=True)
+            subprocess.run([sys.executable, "-m", "gdown", C.AVE_GDRIVE_ID, "-O", str(partial)], check=True)
+            partial.rename(local_zip)
             C.ZIP_ON_DRIVE.parent.mkdir(parents=True, exist_ok=True)
             print(f"Saving a copy to Drive: {C.ZIP_ON_DRIVE}")
-            shutil.copy(local_zip, C.ZIP_ON_DRIVE)
+            shutil.copy(local_zip, C.ZIP_ON_DRIVE.with_suffix(".zip.partial"))
+            C.ZIP_ON_DRIVE.with_suffix(".zip.partial").rename(C.ZIP_ON_DRIVE)
+    if not zipfile.is_zipfile(local_zip):
+        local_zip.unlink()
+        raise SystemExit("The dataset zip is corrupt (also on Drive?). Run this cell again to re-copy it; "
+                         "if it fails again, delete MyDrive/AValidate/data/AVE_Dataset.zip to re-download.")
+    if C.AVE_ROOT.exists():
+        shutil.rmtree(C.AVE_ROOT)          # a half-finished unzip from an interrupted run
     print("Unzipping...")
     with zipfile.ZipFile(local_zip) as z:
         z.extractall(C.AVE_ROOT)
+    done.touch()
     local_zip.unlink()
 
 

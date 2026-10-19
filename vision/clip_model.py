@@ -57,18 +57,21 @@ DEFAULT_PROMPTS = [
 def build_text_embeddings(
     model: CLIPModel,
     tokenizer: CLIPTokenizer,
-    device: torch.device,
+    device: Optional[torch.device] = None,
     prompts: Optional[List[str]] = None
 ) -> torch.Tensor:
     """Encode 29 class prompts into L2-normalized text vectors (29, 512)."""
     if prompts is None:
         prompts = DEFAULT_PROMPTS
     
-    inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(device)
+    m_device = next(model.parameters()).device
+    inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(m_device)
     with torch.no_grad():
         out = model.get_text_features(**inputs)
         text_feats = out.pooler_output if hasattr(out, "pooler_output") else out
         text_feats = text_feats / text_feats.norm(dim=-1, keepdim=True)
+    if device is not None:
+        text_feats = text_feats.to(device)
     return text_feats
 
 
@@ -98,7 +101,7 @@ class CLIPZeroShotModel(nn.Module):
 
         self.prompts = prompts or DEFAULT_PROMPTS
         # Register text embeddings as persistent buffer
-        text_feats = build_text_embeddings(self.clip, self.tokenizer, device, self.prompts)
+        text_feats = build_text_embeddings(self.clip, self.tokenizer, prompts=self.prompts)
         self.register_buffer("text_features", text_feats)  # (29, 512)
 
     def embed(self, x: torch.Tensor) -> torch.Tensor:
@@ -112,12 +115,18 @@ class CLIPZeroShotModel(nn.Module):
         b, s, c, h, w = x.shape
         flat_x = x.view(b * s, c, h, w)
         
-        # Apply standard CLIP normalization if tensor appears to be unnormalized [0..1]
-        # (check if min >= 0 and max <= 1.05)
-        if flat_x.min() >= -0.05 and flat_x.max() <= 1.05:
-            mean = CLIP_MEAN.to(flat_x.device).squeeze(0)
-            std = CLIP_STD.to(flat_x.device).squeeze(0)
-            flat_x = (flat_x - mean) / std
+        # Convert ImageNet-normalized or raw [0..1] input to exact CLIP normalization
+        if flat_x.min() < -0.1:
+            # Unnormalize from ImageNet stats back to [0..1]
+            in_mean = torch.tensor([0.485, 0.456, 0.406], device=flat_x.device).view(1, 3, 1, 1)
+            in_std = torch.tensor([0.229, 0.224, 0.225], device=flat_x.device).view(1, 3, 1, 1)
+            flat_x = flat_x * in_std + in_mean
+            flat_x = torch.clamp(flat_x, 0.0, 1.0)
+
+        # Apply standard CLIP normalization
+        clip_mean = CLIP_MEAN.to(flat_x.device).squeeze(0)
+        clip_std = CLIP_STD.to(flat_x.device).squeeze(0)
+        flat_x = (flat_x - clip_mean) / clip_std
 
         out = self.clip.get_image_features(pixel_values=flat_x)
         feats = out.pooler_output if hasattr(out, "pooler_output") else out

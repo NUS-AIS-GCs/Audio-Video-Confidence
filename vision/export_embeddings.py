@@ -42,8 +42,12 @@ def main() -> None:
     target_dirs = [out_dir]
     if a.final:
         final_dir = C.REPO_ROOT / "vision_final"
-        final_dir.mkdir(parents=True, exist_ok=True)
-        target_dirs.append(final_dir)
+        run_sub_dir = final_dir / a.run_id
+        run_sub_dir.mkdir(parents=True, exist_ok=True)
+        target_dirs.append(run_sub_dir)
+        if a.run_id == "resnet18_v1":
+            final_dir.mkdir(parents=True, exist_ok=True)
+            target_dirs.append(final_dir)
 
     # Class names
     names = class_names() + ["background"]

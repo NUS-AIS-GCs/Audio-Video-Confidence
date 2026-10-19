@@ -1,6 +1,6 @@
 # Audio results
 
-Log-Mel CNN (`AudioCNN`, ~1.18M parameters, trained from scratch) and frozen BEATs + small head (`EmbeddingHead`, ~204k trainable parameters). Test set = AVE official test split.
+Log-Mel CNN (`AudioCNN`, ~1.18M parameters, trained from scratch) frozen BEATs + small head (`EmbeddingHead`, ~204k trainable parameters), and BEATs + LoRA (`BeatsLoRA`, ~499k trainable parameters: LoRA rank 8 on q/v in all 12 layers + head). Test set = AVE official test split.
 Per-second metrics use AVE's 29 labels (28 events + background); clip metrics use 28 events.
 
 | Run | Date | Samples (train/val/test) | Settings | Test clip acc | Test clip macro-F1 | Test sec acc | Test sec macro-F1 | Notes |
@@ -9,8 +9,9 @@ Per-second metrics use AVE's 29 labels (28 events + background); clip metrics us
 | cnn_v2 | 2026-10-12 | 3339 / 402 / 402 | data fix + `--balance sqrt` + 60-epoch cosine + early stop (patience 10), L4 | 0.600 | 0.541 | 0.473 | 0.443 | Worse than v1. Early-stopped at epoch 24 (best 14) while LR was still high; val scores noisy (±0.07). Class weights did not fix rare classes. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/wcnb9emb) |
 | cnn_v3 | 2026-10-13 | 3339 / 402 / 402 | v1 settings on fixed data: 30 epochs cosine, no class weights, no early stop, L4 | 0.694 | 0.622 | 0.544 | 0.505 | Baseline before cnn_v4. Data fix alone ≈ +0.002–0.005 vs v1. Plateaus from ~epoch 25. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/ok62dlzi) |
 | cnn_v4 | 2026-10-13 | 3339 / 402 / 402 | cnn_v3 + `--balance sqrt` (only change), L4 | 0.729 | 0.700 | 0.541 | 0.523 | CNN baseline (selected on val per-second macro-F1: 0.521 vs 0.502). Horse and cat now recognised; bus improved. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/ofa7h6sg) |
-| **beats_iter3_v2** | 2026-10-16 | 3339 / 402 / 402 | frozen BEATs iter3 (self-supervised, never saw AudioSet labels) + head; same loss, sqrt weights, 30 epochs, selection as cnn_v4; T4 | **0.801** | **0.774** | **0.665** | **0.663** | **Official audio result.** +0.14 per-second macro-F1 over cnn_v4. Horse now perfect, cat ~50%, bus still mostly truck. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/3bhzyrod) |
+| beats_iter3_v2 | 2026-10-16 | 3339 / 402 / 402 | frozen BEATs iter3 (self-supervised, never saw AudioSet labels) + head; same loss, sqrt weights, 30 epochs, selection as cnn_v4; T4 | 0.801 | 0.774 | 0.665 | 0.663 | Frozen BEATs result. +0.14 per-second macro-F1 over cnn_v4. Horse now perfect, cat ~50%, bus still mostly truck. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/3bhzyrod) |
 | beats_as2m_v2 | 2026-10-16 | 3339 / 402 / 402 | as above with BEATs iter3+ AS2M (pre-training used AudioSet labels) | 0.883 | 0.872 | 0.743 | 0.752 | Comparison only: may have seen AVE test clips with labels (AVE ⊂ AudioSet). Gap vs iter3 mixes a stronger encoder with possible label exposure. Val peaks ~epoch 5, then mild overfitting. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/b5vbpsc7) |
+| **beats_lora_r8_v1** | 2026-10-17 | 3339 / 402 / 402 | BEATs iter3 + LoRA (r=8, alpha=16, q/v, 12 layers), head warm-started from beats_iter3_v2, frozen encoder kept in eval mode; 10 epochs, batch 16, lr 2e-4, sqrt weights, bf16 on T4 (~7.6 min/epoch) | **0.818** | **0.787** | **0.686** | **0.686** | **Official audio result; published to `embeddings/audio_final/`.** Epoch 0 reproduced beats_iter3_v2's val scores exactly (wiring check). Val per-second macro-F1 0.669 → 0.691 (best epoch 9). [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/fd266u8u) |
 
 ## Observations (cnn_v1)
 - Near-perfect: clock, male speech, ukulele, church bell, chainsaw, frying.
@@ -43,8 +44,14 @@ Per-second metrics use AVE's 29 labels (28 events + background); clip metrics us
 - First attempt (beats_iter3_v1 / beats_as2m_v1, W&B) failed: embeddings extracted under float16 overflowed to NaN. Fixed by extracting in float32; those runs are invalid.
 - Exported embeddings: `embeddings/audio_beats_iter3_v2/` (N, 10, 256), keyed by sample_id.
 
+## Observations (BEATs + LoRA)
+- LoRA improves on frozen BEATs on both validation (per-second macro-F1 0.669 → 0.691) and test (0.663 → 0.686; clip accuracy 0.801 → 0.818), so the gain isn't specific to one split. It is modest: one run each, 402 test clips.
+- Training was stable: loss fell every epoch, validation rose to epoch 9 without overfitting, and LoRA beat the warm start from epoch 2.
+- Cost: ~76 min of T4 time for 10 epochs (the transformer runs every step), against seconds for training a head on cached frozen embeddings.
+- Overall audio progression, per-second macro-F1 on test: CNN 0.523 → frozen BEATs 0.663 → BEATs + LoRA 0.686.
+
 ## Next runs
-- BEATs + LoRA (adapt the encoder instead of freezing it), compared against beats_iter3_v2.
+- LoRA rank comparison (r = 4, 16), in progress.
 - Optional: extra seeds to measure run-to-run noise.
 
 ## Data notes

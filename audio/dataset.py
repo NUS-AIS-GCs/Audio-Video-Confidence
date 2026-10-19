@@ -72,3 +72,34 @@ class AVEAudio(Dataset):
         if self.is_logmel:
             x = x.unsqueeze(1)
         return x, torch.from_numpy(self.y[j]), torch.tensor(self.yclip[j])
+
+
+class AVEWave(Dataset):
+    """Raw 16 kHz waveforms for end-to-end models (BEATs + LoRA). Labels and row order come from a
+    feature cache folder (e.g. beats_iter3), so results line up sample-for-sample with the frozen runs."""
+
+    def __init__(self, split: str, fdir: Path, indices=None):
+        import pandas as pd
+        self.fdir = fdir
+        self.ids = pd.read_csv(fdir / f"{split}_ids.csv")["clip_id"].tolist()
+        self.y = np.load(fdir / f"{split}_y.npy")
+        self.yclip = np.load(fdir / f"{split}_yclip.npy")
+        self.idx = np.arange(len(self.y)) if indices is None else np.asarray(indices)
+        self.is_logmel = False
+
+    def __len__(self):
+        return len(self.idx)
+
+    def __getitem__(self, i):
+        from audio.features import load_wav
+        j = self.idx[i]
+        wav = torch.from_numpy(load_wav(C.WAV_DIR / f"{self.ids[j]}.wav"))
+        return wav, torch.from_numpy(self.y[j]), torch.tensor(self.yclip[j])
+
+
+def make_dataset(split: str, kind: str, fdir: Path, **kw) -> Dataset:
+    """Waveforms for end-to-end LoRA models, cached features otherwise."""
+    if kind == "beats_lora":
+        kw.pop("augment", None)
+        return AVEWave(split, fdir, **kw)
+    return AVEAudio(split, fdir=fdir, **kw)

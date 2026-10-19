@@ -217,11 +217,86 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(activity.dtype, np.dtype(bool))
 
     def test_invalid_intervals_rejected(self):
-        for start, end in ((-1, 3), (5, 5), (8, 6), (0, 11), ("1.5", 3), ("NaN", 4)):
+        for start, end in ((-1, 3), (-1, -1), (1, 1), (5, 5), (10, 10),
+                           (9, 2), (8, 6), (0, -1), (0, 11),
+                           ("1.5", 3), ("NaN", 4), ("0.0", 0)):
             with self.subTest(start=start, end=end):
                 rows = [list(ROWS[0])]
                 rows[0][3:5] = [start, end]
                 self.assert_bad(self.fixture(rows=rows), "interval|integer")
+
+    def test_official_empty_interval_has_no_annotated_activity(self):
+        record = Record("VWi2ENBuTbw__08", "VWi2ENBuTbw", "Church bell", 0, 0, 8)
+        for zero in (0, np.int64(0)):
+            with self.subTest(zero_type=type(zero)):
+                activity = annotation_activity([replace(record, start=zero, end=zero)])
+                np.testing.assert_array_equal(activity, np.zeros((1, 10), dtype=bool))
+                self.assertEqual(activity.dtype, np.dtype(bool))
+                self.assertFalse(activity.flags.writeable)
+
+    def test_official_empty_interval_retained_in_complete_shuffled_join(self):
+        empty = ("VWi2ENBuTbw__08", "VWi2ENBuTbw", "Church bell", 0, 0)
+        rows = [("before__08", "before", "Church bell", 1, 2), empty,
+                ("after__08", "after", "Church bell", 3, 4)]
+        # Synthetic vocabulary preserves the real sample's category at index 8.
+        names = [f"A fixture {i:02d}" for i in range(8)] + ["Church bell"] + NAMES[9:]
+        bundles = []
+        for modality, ordered in (("audio", rows), ("vision", [rows[2], rows[0], empty])):
+            root = self.fixture(modality, rows=ordered, probs=True)
+            (root / "class_names.json").write_text(json.dumps(names), encoding="utf-8")
+            bundle = load_bundle(root, modality, splits=("train",), expected_counts={"train": 3})
+            self.assertTrue(validate_bundle(bundle).complete)
+            self.assertEqual(bundle.requested_splits, ("train",))
+            self.assertEqual(tuple(bundle.metadata), ("train",))
+            self.assertEqual(len(bundle.splits["train"].embeddings), 3)
+            index = ordered.index(empty)
+            self.assertEqual(bundle.metadata["train"][index], Record(*empty, 8))
+            np.testing.assert_array_equal(
+                bundle.splits["train"].embeddings[index],
+                np.load(root / "train_emb.npy", allow_pickle=False)[index],
+            )
+            self.assertFalse(annotation_activity(bundle.metadata["train"])[index].any())
+            self.assertIsNone(bundle.splits["train"].input_validity)
+            self.assertIsNone(bundle.splits["train"].timestamps)
+            bundles.append(bundle)
+        audio, vision = bundles
+        alignment = align_on_sample_id(audio, vision, split="train")
+        alignment.require_complete()
+        self.assertEqual(alignment.sample_ids, tuple(row[0] for row in rows))
+        self.assertEqual((alignment.audio_row_count, alignment.visual_row_count), (3, 3))
+        np.testing.assert_array_equal(alignment.audio_indices, [0, 1, 2])
+        np.testing.assert_array_equal(alignment.visual_indices, [1, 2, 0])
+        np.testing.assert_array_equal(
+            audio.splits["train"].embeddings[alignment.audio_indices, :, :32],
+            vision.splits["train"].embeddings[alignment.visual_indices, :, :32],
+        )
+        # An empty annotation is still a required source row for full coverage.
+        omitted = replace(alignment, sample_ids=(rows[0][0], rows[2][0]),
+                          audio_indices=np.array([0, 2]), visual_indices=np.array([1, 0]))
+        self.assert_alignment_rejected(omitted, "full source-row coverage")
+
+    def test_empty_annotation_does_not_override_explicit_input_validity(self):
+        rows = [("alpha__00", "alpha", NAMES[0], 0, 0)]
+        for modality in ("audio", "vision"):
+            with self.subTest(modality=modality):
+                root = self.fixture(modality, rows=rows)
+                validity = np.array([[True, False] * 5], dtype=bool)
+                self.replace_array(root, "valid", validity)
+                bundle = self.load(root, modality)
+                self.assertTrue(validate_bundle(bundle).complete)
+                self.assertFalse(annotation_activity(bundle.metadata["train"]).any())
+                np.testing.assert_array_equal(bundle.splits["train"].input_validity, validity)
+
+    def test_empty_annotation_remains_in_leakage_audit(self):
+        rows = [("alpha__00", "alpha", NAMES[0], 0, 0)]
+        for modality in ("audio", "vision"):
+            with self.subTest(modality=modality):
+                bundle = self.load(self.fixture(modality, rows=rows, splits=("train", "val")),
+                                   modality, splits=("train", "val"))
+                report = audit_leakage(bundle)
+                self.assertEqual(report.sample_overlap["train&val"], ("alpha__00",))
+                self.assertEqual(report.source_overlap["train&val"], ("alpha",))
+                self.assertEqual(report.duplicate_sample_ids, {"train": (), "val": ()})
 
     def test_cross_split_annotation_and_source_overlap_are_distinct(self):
         root = self.fixture(splits=("train", "val", "test"))
@@ -352,8 +427,11 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(audit_leakage(duplicated).duplicate_sample_ids["train"], ("alpha__00",))
 
     def test_public_activity_rejects_noninteger_intervals(self):
-        with self.assertRaisesRegex(ContractError, "integer interval"):
-            annotation_activity([Record("alpha__00", "alpha", NAMES[0], 1.5, 3, 0)])
+        for start, end in ((1.5, 3), (0.0, 0), (0, 0.0), ("0", 0),
+                           (False, 0), (0, False), (np.bool_(False), 0), (0, np.bool_(False))):
+            with self.subTest(start=start, end=end):
+                with self.assertRaisesRegex(ContractError, "integer interval"):
+                    annotation_activity([Record("alpha__00", "alpha", NAMES[0], start, end, 0)])
         self.assertEqual(annotation_activity([]).shape, (0, 10))
 
     def test_unrequested_split_cannot_claim_alignment(self):

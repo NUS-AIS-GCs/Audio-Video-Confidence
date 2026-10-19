@@ -199,8 +199,54 @@ existing interface. The module does not resample or learn offsets.
 
 `annotation_activity(records)` returns bool `(N,10)` computed using
 `start <= t < end`. Start/end must be integer seconds with
-`0 <= start < end <= 10`; invalid intervals are rejected rather than clipped.
-For [6,8), only bins 6 and 7 are active.
+`0 <= start < end <= 10`, with the sole empty-interval exception `[0,0)`
+described below. Invalid intervals are rejected rather than clipped.
+For [6,8), only bins 6 and 7 are active. Booleans and noninteger values,
+including floating-point `0.0`, are not accepted as integer seconds.
+
+### Official AVE empty annotation compatibility (Phase 1.1)
+
+The official training annotation is retained by both teammate exporters:
+
+```csv
+VWi2ENBuTbw__08,VWi2ENBuTbw,Church bell,0,0
+```
+
+The [official AVE annotation file](https://github.com/YapengTian/AVE-ECCV18/blob/master/data/Annotations.txt)
+contains `Church bell&VWi2ENBuTbw&good&0&0`. Both
+`audio/data_ave.py::second_labels()` and `vision/data_ave.py::second_labels()`
+leave all ten labels as background for this empty slice. Their metadata/export
+paths retain the row and its original clip category.
+
+The contract accepts exactly integer `[0,0)` as an explicit AVE convention;
+this is an interval-format exception, not an ID-based bypass of validation.
+It does not permit other empty intervals such as `[5,5)` or `[10,10)`, negative
+values, reversed intervals such as `[9,2)`, fractional seconds, or endpoints
+outside [0,10]. All identity, class-mapping, array, count, alignment coverage,
+and leakage checks still apply.
+
+`annotation_activity()` returns ten False bins for this row: there are no
+annotated active joint-event seconds. The sample keeps its original sample ID,
+clip ID, `Church bell` category/index, array row, and training membership. It
+remains required for complete representation alignment and leakage auditing.
+No category, probability, embedding, validity flag, or timestamp is rewritten.
+Absent input validity remains unknown; supplied input validity remains independent
+of the all-false annotation activity.
+
+For Phase 2, representation retention is separate from eligibility for a loss.
+This row must not become a positive annotated event merely because its clip
+category is `Church bell`. Its all-false activity can reproduce the producer's
+event/background convention, but is not evidence that either modality is absent
+or invalid. Any use for presence supervision requires an explicit task policy;
+independent audio/visual presence cannot be inferred from it.
+
+Treat its event-compatibility status as **unknown**. Exclude or mask this sample
+from semantic event-compatibility/correspondence supervision and its labeled
+metrics until a separately justified policy or annotation resolves that status;
+do not silently assign MATCH or MISMATCH from category or empty activity.
+Original clip pairing is known provenance, not proof of an active compatible
+event. Keep the row in the bundles and joins even when a future loss mask excludes
+it. Phase 1 supplies no correspondence labels or target-supervision mask.
 
 Keep these concepts separate:
 

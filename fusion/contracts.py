@@ -186,10 +186,15 @@ def _readonly(array: NDArray) -> NDArray:
 
 
 def _check_interval(start: int, end: int, context: str) -> None:
+    # Official AVE retains [0,0) annotations (VWi2ENBuTbw__08). They have
+    # no annotated active bins; no other empty interval is supported.
     if (not isinstance(start, Integral) or not isinstance(end, Integral)
             or isinstance(start, bool) or isinstance(end, bool)
-            or not (0 <= start < end <= SECONDS)):
-        raise ContractError(f"{context}: expected integer interval 0 <= start < end <= 10")
+            or not (0 <= start < end <= SECONDS or start == end == 0)):
+        raise ContractError(
+            f"{context}: expected integer interval 0 <= start < end <= 10 "
+            "or the official AVE empty interval [0,0)"
+        )
 
 
 def _check_record(record: Record, context: str) -> None:
@@ -530,6 +535,8 @@ def load_bundle(
 def annotation_activity(records: Sequence[Record]) -> NDArray:
     """Ground-truth joint event activity only, never an input-validity mask.
 
+    The official AVE empty interval [0,0) yields ten False bins. Retaining
+    its representation does not establish event compatibility or presence.
     Task-specific target-supervision masks must be provided by future consumers;
     no correspondence labels or modality-specific presence labels are invented.
     """

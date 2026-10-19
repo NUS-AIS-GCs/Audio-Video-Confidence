@@ -9,7 +9,8 @@ Per-second metrics use AVE's 29 labels (28 events + background); clip metrics us
 | mobilenet_20ep_v1 | 2026-10-13 | 3339 / 402 / 402 | mobilenet_10ep_v1 + 20 epochs (longer schedule) | 0.711 | 0.703 | 0.567 | 0.595 | Mild overfitting: train loss drops (0.52 → 0.28), but test F1 drops by -0.014. 10 epochs with cosine schedule is optimal. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/5kyyoo38) |
 | mobilenet_nobalance_v1 | 2026-10-13 | 3339 / 402 / 402 | mobilenet_10ep_v1 settings but `--balance none` (unweighted CE) | 0.724 | 0.720 | 0.568 | 0.600 | Test sec macro-F1 drops by -0.009 vs sqrt balancing. Unweighted loss biases per-second predictions toward background. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/1k9uzd2o) |
 | mobilenet_scratch_v1 | 2026-10-13 | 3339 / 402 / 402 | MobileNet-V3 Small from scratch (no ImageNet pretraining), 15 ep, lr 1e-3 | 0.381 | 0.349 | 0.294 | 0.276 | Massive performance drop (-34.5% clip acc, -33.3% sec F1). Pretraining is essential for small video datasets. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/o7s86mue) |
-| **resnet18_v1** | 2026-10-13 | 3339 / 402 / 402 | ResNet-18 pretrained (~11.2M params), 10 ep cosine, batch 8, lr 3e-4, `--balance sqrt` | **0.734** | **0.722** | **0.612** | **0.638** | **Official vision baseline** (selected on val sec macro-F1: 0.664 vs 0.623). Best overall across all 4 metrics; +2.8% sec acc and +2.9% sec macro-F1 over MobileNet. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/axz8omu9) |
+| **resnet18_v1** | 2026-10-13 | 3339 / 402 / 402 | ResNet-18 pretrained (~11.2M params), 10 ep cosine, batch 8, lr 3e-4, `--balance sqrt` | **0.734** | **0.722** | **0.612** | **0.638** | **Official supervised baseline** (selected on val sec macro-F1: 0.664 vs 0.623). Best overall across all 4 metrics; +2.8% sec acc and +2.9% sec macro-F1 over MobileNet. [W&B run](https://wandb.ai/GC2-AValidate/avalidate/runs/axz8omu9) |
+| **clip_zeroshot_v1** | 2026-10-19 | — / — / 402 | OpenAI CLIP ViT-B/16 (zero-shot, 512-D), prompt template ensemble, no training | **0.816** | **0.815** | **0.631** | **0.663** | **Zero-shot foundation model result.** Decisively outperforms trained ResNet-18 (+8.2% clip acc, +9.3% clip F1, +1.9% sec acc, +2.5% sec F1) without any parameter updates or supervision on AVE. |
 
 ## Observations (mobilenet_10ep_v1)
 - Highly efficient baseline (~1.2M parameters). Completes 10 epochs in under 4 minutes on the local Intel Arc 140V integrated GPU (XPU) with batch size 8.
@@ -41,20 +42,33 @@ Per-second metrics use AVE's 29 labels (28 events + background); clip metrics us
   - Test second accuracy: **0.612** (+0.028 vs MobileNet)
   - Test second macro-F1: **0.638** (+0.029 vs MobileNet)
 - Peak validation second macro-F1 reached **0.664** and validation clip accuracy reached **0.833** (vs 0.623 / 0.774 for MobileNet).
-- The residual topology yields significantly sharper temporal event boundaries, reducing boundary leakage into adjacent background seconds.
-- Selected as the **official vision champion** for downstream multimodal fusion. Checkpoint saved at `_local/drive/artifacts/vision_baseline/resnet18_v1/best.pt`.
+- Selected as the **official supervised vision champion** for downstream multimodal fusion. Checkpoint saved at `_local/drive/artifacts/vision_baseline/resnet18_v1/best.pt`.
 - Exported multimodal visual embeddings saved to `_local/drive/embeddings/resnet18_v1/`.
 
-## Comparison: Audio Baseline (`cnn_v4`) vs Vision Baseline (`resnet18_v1`)
+## Observations (clip_zeroshot_v1 — Zero-Shot Foundation Baseline)
+- Uses pretrained OpenAI CLIP ViT-B/16 (12 transformer layers, 768-D ViT, 512-D multimodal projection) with a hand-tuned natural language prompt ensemble for all 28 AVE event classes + background.
+- **Zero training on AVE**: Evaluated directly off-the-shelf on the 402 test clips without seeing a single AVE training sample or gradient step.
+- Massive performance leap:
+  - Test clip accuracy: **0.816** (+8.2% absolute vs ResNet-18)
+  - Test clip macro-F1: **0.815** (+9.3% absolute vs ResNet-18)
+  - Test second accuracy: **0.631** (+1.9% absolute vs ResNet-18)
+  - Test second macro-F1: **0.663** (+2.5% absolute vs ResNet-18)
+- Clip-level accuracy closely matches the audio champion BEATs + LoRA (0.816 vs 0.818), and per-second macro-F1 matches frozen BEATs (0.663).
+- Proves that large-scale contrastive multimodal pre-training (400M image-text pairs) develops deep semantic representations that transfer remarkably well to in-the-wild YouTube audio-visual event detection.
 
-| Metric | Audio (`cnn_v4`) | Vision (`resnet18_v1`) | Modality Delta ($\Delta_{\text{vis} - \text{aud}}$) |
-|---|---|---|---|
-| Test clip accuracy | 0.729 | **0.734** | +0.005 |
-| Test clip macro-F1 | 0.700 | **0.722** | +0.022 |
-| Test second accuracy | 0.541 | **0.612** | **+0.071** |
-| Test second macro-F1 | 0.523 | **0.638** | **+0.115** |
+## Cross-Modality Comparison: Audio vs Vision
 
-- **Key Insight**: While clip-level classification is closely matched (~73%), vision significantly outperforms audio at the second-level (+11.5% macro-F1, +7.1% accuracy). This is directly attributable to the AVE dataset annotation protocol: an event is only labeled positive when the sound source is *simultaneously visible*. Audio alone cannot verify visual visibility, whereas vision directly observes source presence.
+| Metric | Audio CNN (`cnn_v4`) | Audio Frozen BEATs (`beats_iter3_v2`) | Audio LoRA (`beats_lora_r8_v1`) | Vision ResNet-18 (`resnet18_v1`) | Vision Zero-Shot CLIP (`clip_zeroshot_v1`) |
+|---|---|---|---|---|---|
+| Test clip accuracy | 0.729 | 0.801 | **0.818** | 0.734 | 0.816 |
+| Test clip macro-F1 | 0.700 | 0.774 | 0.787 | 0.722 | **0.815** |
+| Test second accuracy | 0.541 | 0.665 | **0.686** | 0.612 | 0.631 |
+| Test second macro-F1 | 0.523 | 0.663 | **0.690** | 0.638 | 0.663 |
+
+- **Key Takeaways**:
+  1. Both modalities exhibit a parallel trajectory: small models trained from scratch or ImageNet (`AudioCNN` ~72.9% clip acc, `ResNet-18` ~73.4% clip acc) plateau around 73% clip accuracy.
+  2. Large pretrained foundation models (`BEATs` in audio, `CLIP ViT-B/16` in vision) shatter that ceiling, pushing clip accuracy beyond 81% and per-second macro-F1 to 0.66+.
+  3. CLIP's 512-D visual projections integrate directly with the multimodal fusion contract (`(N, 10, 512)`), providing a high-powered visual branch for fusion experiments.
 
 ## Baseline Architecture & Contract
 - **Input**: 10 aligned frames per 10-second clip (1 fps), resized to 224x224 RGB.

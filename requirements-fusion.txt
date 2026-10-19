@@ -1,0 +1,2 @@
+# Phase 1 contract loading and synthetic unittest suite; no model packages.
+numpy>=1.26,<3

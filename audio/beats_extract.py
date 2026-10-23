@@ -55,8 +55,9 @@ def find_checkpoint(name: str):
     return dest
 
 
-def load_beats(name: str, device) -> BEATs:
-    path = find_checkpoint(name)
+def load_beats(name: str, device, path=None) -> BEATs:
+    """Pre-trained BEATs encoder by checkpoint name; `path` overrides the lookup (e.g. an inference bundle)."""
+    path = path or find_checkpoint(name)
     spec = C.BEATS[name]
     if spec["sha256"]:
         got = sha256(path)

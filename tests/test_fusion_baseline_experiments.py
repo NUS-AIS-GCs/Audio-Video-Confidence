@@ -75,11 +75,26 @@ class RunnerTests(unittest.TestCase):
             p.start(); self.addCleanup(p.stop)
         p = patch("fusion.run_baseline_experiments.verify_reference", return_value=self.reference_report)
         self.reference_mock = p.start(); self.addCleanup(p.stop)
+        # Runner unit tests exercise synthetic artifacts, not this checkout's
+        # Git branch/state. Production preflight has separate tests below.
+        p = patch("fusion.run_baseline_experiments._repository", return_value={
+            "repository": "NUS-AIS-GCs/Audio-Video-Confidence", "commit": "a" * 40,
+            "branch": "feature/fusion-phase3-baselines", "working_tree": [],
+            "phase2_dependency": "synthetic fixture only",
+        })
+        self.repository_mock = p.start(); self.addCleanup(p.stop)
         self.config = ExperimentConfig(a, v, official, reference, evidence, self.integration, self.root / "result")
         MockTracker.instances.clear()
 
     def run_fixture(self):
         return run_experiments(self.config, tracker_factory=MockTracker)
+
+    def test_runner_fixture_does_not_query_checked_out_repository(self):
+        with patch("fusion.run_baseline_experiments._git", side_effect=AssertionError("checkout must stay isolated")):
+            self.run_fixture()
+        self.repository_mock.assert_called_once_with()
+        config = json.loads((self.config.output_dir / "config.json").read_text())
+        self.assertEqual(config["git"], self.repository_mock.return_value)
 
     def test_full_run_counts_lifecycle_exports_and_mock_upload(self):
         result = self.run_fixture()
@@ -266,6 +281,38 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaises(ContractError):
                 upload_saved(self.config.output_dir, tracker_factory=MockTracker)
             self.assertEqual(len(MockTracker.instances), previous)
+
+
+class RepositoryPreflightTests(unittest.TestCase):
+    """Exercise the real production guard with isolated Git command responses."""
+
+    def preflight(self, *, branch="feature/fusion-phase3-baselines", origin=None,
+                  working_diff="", index_diff=""):
+        from fusion.run_baseline_experiments import _repository
+        responses = {
+            ("remote", "get-url", "origin"): origin or "https://github.com/NUS-AIS-GCs/Audio-Video-Confidence.git",
+            ("branch", "--show-current"): branch,
+            ("diff", "--name-only"): working_diff,
+            ("diff", "--cached", "--name-only"): index_diff,
+            ("rev-parse", "HEAD"): "b" * 40,
+            ("status", "--porcelain"): "",
+        }
+        with patch("fusion.run_baseline_experiments._git", side_effect=lambda *args: responses[args]):
+            return _repository()
+
+    def test_intended_production_branch_passes(self):
+        self.assertEqual(self.preflight()["branch"], "feature/fusion-phase3-baselines")
+
+    def test_other_branches_still_rejected(self):
+        for branch in ("main", "feature/fusion-phase4-mlp", "unrelated-feature"):
+            with self.subTest(branch=branch), self.assertRaisesRegex(ContractError, "required branch"):
+                self.preflight(branch=branch)
+
+    def test_wrong_origin_and_dirty_tracked_state_still_rejected(self):
+        for changes in ({"origin": "https://example.invalid/unrelated.git"},
+                        {"working_diff": "modified.py"}, {"index_diff": "staged.py"}):
+            with self.subTest(changes=changes), self.assertRaises(ContractError):
+                self.preflight(**changes)
 
 
 class RankingAndConfigurationTests(unittest.TestCase):

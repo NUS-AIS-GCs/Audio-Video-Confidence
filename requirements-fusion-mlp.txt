@@ -1,0 +1,3 @@
+# Phase 4 adds PyTorch; Phase 1--3 keep their existing NumPy-only contract path.
+-r requirements-fusion.txt
+torch>=2.5,<3

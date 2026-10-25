@@ -72,9 +72,12 @@ def row_references(output, name):
     return _fingerprint([tuple(row[key] for key in fields) for row in rows])
 
 
-def primary_evidence(label, output):
+def primary_evidence(label, output, *, schema=None, include_details=False):
     """Project persisted evidence onto primary metrics; never access challenge scores."""
-    _verify_output_manifest(output)
+    if schema is None:
+        _verify_output_manifest(output)
+    else:
+        _verify_output_manifest(output, schema=schema)
     complete, tracking = _read(output / "completion.json"), _read(output / "tracking.json")
     if complete["status"] != "COMPLETE" or tracking["status"] != "COMPLETE" or not tracking["remote_summary_verified"]:
         raise ContractError("only verified completed runs may enter selection")
@@ -105,6 +108,12 @@ def primary_evidence(label, output):
             row[f"{split}_{key}"] = primary[key]
     row["train_minus_val_gap"] = {key: row[f"train_{key}"]-row[f"val_{key}"]
                                   for key in ("roc_auc", "average_precision", "f1")}
+    if include_details:
+        row.update(model=asdict(metadata.model), training=asdict(metadata.training))
+        for split in ("train", "val"):
+            report = final[f"{split}_primary"]
+            for key in ("precision", "recall", "counts"):
+                row[f"{split}_{key}"] = report[key]
     return row
 
 

@@ -2,17 +2,17 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from numbers import Integral
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from .artifact_integration import manifest_from_json, manifest_to_json
+from .artifact_integration import _json, _read_json, manifest_from_json, manifest_to_json
 from .contracts import Bundle, ContractError, SPLITS, validate_bundle
-from .pair_contracts import PairType
-from .pair_generator import GeneratedManifest
+from .pair_contracts import PairType, SamplingPolicy
+from .pair_generator import GeneratedManifest, GenerationConfig, SourceReuse, generate_pairs
 
 
 def _snapshot(value):
@@ -128,6 +128,46 @@ class EmbeddingDataset(Dataset):
         manifest = manifest_from_json(text, audio, vision,
                                      expected_artifact_fingerprint=artifact_fingerprint)
         return cls(manifest, audio, vision, artifact_fingerprint=artifact_fingerprint, **kwargs)
+
+    @classmethod
+    def from_scoped_json(cls, text, audio, vision, *, split, expected_manifest_sha256,
+                         artifact_fingerprint):
+        """TRAIN/val-only reader bound to verified original manifest bytes.
+
+        Regenerate every pair, field, count and source reference using only the
+        requested TRAIN/val bundles. Only full-inventory leakage context is opaque:
+        it was fixed by the original file hash and is never used as model input.
+        This avoids parsing held-out producer labels to reconstruct that context.
+        The legacy all-split reader above retains its original exact behavior.
+        """
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        if (split not in ("train", "val") or digest != expected_manifest_sha256
+                or any(set(b.requested_splits) != {"train", "val"} for b in (audio, vision))):
+            raise ContractError("scoped reader requires verified original bytes and TRAIN/val-only bundles")
+        raw = _read_json(text)
+        try:
+            if (raw["schema"] != "gc2-pair-manifest-v1" or raw["config"]["split"] != split
+                    or raw["artifact_fingerprint"] != artifact_fingerprint
+                    or raw["policy"]["hard_negative_policy"] is not None):
+                raise ContractError("incompatible scoped manifest")
+            settings = dict(raw["config"])
+            settings["source_reuse"] = SourceReuse(settings["source_reuse"])
+            manifest = generate_pairs(audio, vision, config=GenerationConfig(**settings),
+                                      policy=SamplingPolicy(**raw["policy"]))
+            canonical = _read_json(manifest_to_json(manifest, audio, vision,
+                                                    artifact_fingerprint=artifact_fingerprint))
+            # These three fields describe unavailable all-split metadata only.
+            # Selected-split provenance, pair_count, all pairs and all other
+            # report fields must still match exact deterministic regeneration.
+            for name in ("source_overlaps", "missing_audio_metadata_splits", "missing_visual_metadata_splits"):
+                canonical["report"]["source_validation"][name] = raw["report"]["source_validation"][name]
+            if _json(canonical) != _json(raw):
+                raise ContractError("scoped manifest differs from deterministic regeneration")
+            result = cls(manifest, audio, vision, split=split, artifact_fingerprint=artifact_fingerprint)
+            result._provenance = replace(result.provenance, manifest_sha256=digest)
+            return result
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ContractError("invalid scoped manifest") from exc
 
     @property
     def pairs(self):

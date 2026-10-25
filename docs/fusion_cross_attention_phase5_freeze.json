@@ -1,0 +1,1146 @@
+{
+  "schema": "gc2-phase5-final-research-freeze-v1",
+  "freeze_date": "2026-10-25",
+  "timezone": "Asia/Singapore",
+  "research_status": "FROZEN",
+  "final_verification_status": "BLOCKED_BY_WINDOWS_APPLICATION_CONTROL",
+  "commit_readiness": "FIX_REQUIRED",
+  "selected_attention_variant": "A2",
+  "best_learned_model_by_validation_auc": "E3",
+  "attention_ranking": [
+    "A2",
+    "A3",
+    "initial",
+    "A1"
+  ],
+  "ranking_rule": "validation ROC-AUC descending, AP descending, F1 descending, fixed initial/A1/A2/A3 order",
+  "target_definition": {
+    "positive": 1,
+    "positive_meaning": "original audio-video pairing provenance",
+    "negative": 0,
+    "negative_meaning": "substituted pairing provenance",
+    "causal_source_identity_claim": false
+  },
+  "models": [
+    {
+      "epochs_executed": 14,
+      "frozen_threshold": 0.0406411536485028,
+      "label": "initial",
+      "model": {
+        "activation": "gelu",
+        "aggregation": "masked_mean",
+        "architecture": "bidirectional_cross_attention",
+        "attention_dropout": 0.1,
+        "audio_dim": 256,
+        "d_model": 256,
+        "dropout": 0.1,
+        "feedforward_dim": 512,
+        "initialization_seed": 42,
+        "num_heads": 4,
+        "position_encoding": "sinusoidal",
+        "temporal_bins": 10,
+        "visual_dim": 512
+      },
+      "parameter_count": 1251841,
+      "selected_epoch": 9,
+      "train_loss": 0.019389008893777832,
+      "val_accuracy": 0.8992537313432836,
+      "val_average_precision": 0.9510582382362514,
+      "val_counts": {
+        "fn": 26,
+        "fp": 55,
+        "tn": 347,
+        "tp": 376
+      },
+      "val_f1": 0.9027611044417767,
+      "val_loss": 0.44137032233660495,
+      "val_precision": 0.8723897911832946,
+      "val_recall": 0.9353233830845771,
+      "val_roc_auc": 0.9564738496571867,
+      "run_url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/runs/hiyb44br",
+      "checkpoint_sha256": "50fa1d9675c54485b207abe16be47ce7acc5f0a7fcce52df3b21934aa40ea088",
+      "model_sha256": "0999caff3ae997d2a95bd7d1c7bf58c69c09b4d3eb43cf1257da7a0bc51c8bcb"
+    },
+    {
+      "epochs_executed": 14,
+      "frozen_threshold": 0.25910291122020657,
+      "label": "A1",
+      "model": {
+        "activation": "gelu",
+        "aggregation": "masked_mean",
+        "architecture": "unidirectional_cross_attention",
+        "attention_direction": "audio_to_video",
+        "attention_dropout": 0.1,
+        "audio_dim": 256,
+        "d_model": 256,
+        "dropout": 0.1,
+        "feedforward_dim": 512,
+        "initialization_seed": 42,
+        "num_heads": 4,
+        "position_encoding": "sinusoidal",
+        "temporal_bins": 10,
+        "visual_dim": 512
+      },
+      "parameter_count": 724481,
+      "selected_epoch": 9,
+      "train_loss": 0.02841950486020575,
+      "val_accuracy": 0.9067164179104478,
+      "val_average_precision": 0.9482889014758143,
+      "val_counts": {
+        "fn": 36,
+        "fp": 39,
+        "tn": 363,
+        "tp": 366
+      },
+      "val_f1": 0.9070631970260223,
+      "val_loss": 0.3813642269343286,
+      "val_precision": 0.9037037037037037,
+      "val_recall": 0.9104477611940298,
+      "val_roc_auc": 0.9543575654067968,
+      "run_url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/runs/2wbi8en8",
+      "checkpoint_sha256": "f6d524882bb2843c65d4c37b2d615968e1f15fd7aa464bab1cd64e04c3803903",
+      "model_sha256": "53f899261bf0cd31dab1ae1472dddddc9631dbdce2a12cf4ae73db519b524b80"
+    },
+    {
+      "epochs_executed": 23,
+      "frozen_threshold": 0.0026640388978268056,
+      "label": "A2",
+      "model": {
+        "activation": "gelu",
+        "aggregation": "masked_mean",
+        "architecture": "unidirectional_cross_attention",
+        "attention_direction": "video_to_audio",
+        "attention_dropout": 0.1,
+        "audio_dim": 256,
+        "d_model": 256,
+        "dropout": 0.1,
+        "feedforward_dim": 512,
+        "initialization_seed": 42,
+        "num_heads": 4,
+        "position_encoding": "sinusoidal",
+        "temporal_bins": 10,
+        "visual_dim": 512
+      },
+      "parameter_count": 724481,
+      "selected_epoch": 18,
+      "train_loss": 0.0008968394336710227,
+      "val_accuracy": 0.8992537313432836,
+      "val_average_precision": 0.9583877196552544,
+      "val_counts": {
+        "fn": 15,
+        "fp": 66,
+        "tn": 336,
+        "tp": 387
+      },
+      "val_f1": 0.9052631578947369,
+      "val_loss": 0.5577570816770715,
+      "val_precision": 0.8543046357615894,
+      "val_recall": 0.9626865671641791,
+      "val_roc_auc": 0.9608549293334323,
+      "run_url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/runs/6mo5xu4k",
+      "checkpoint_sha256": "0adf31d64d49e1917bca1ee4835aa2e40c506a41f7b7260a1dd1f68b62ec9c12",
+      "model_sha256": "1ef5985f9de3e7b9f2994b076ebd16c1b0cd7d4922c0842d12d301aa202c2b8e"
+    },
+    {
+      "epochs_executed": 16,
+      "frozen_threshold": 0.10440009964709925,
+      "label": "A3",
+      "model": {
+        "activation": "gelu",
+        "aggregation": "masked_mean",
+        "architecture": "bidirectional_cross_attention",
+        "attention_dropout": 0.1,
+        "audio_dim": 256,
+        "d_model": 256,
+        "dropout": 0.1,
+        "feedforward_dim": 512,
+        "initialization_seed": 42,
+        "num_heads": 4,
+        "position_encoding": "none",
+        "temporal_bins": 10,
+        "visual_dim": 512
+      },
+      "parameter_count": 1251841,
+      "selected_epoch": 11,
+      "train_loss": 0.013134948642301454,
+      "val_accuracy": 0.8980099502487562,
+      "val_average_precision": 0.9555120953024732,
+      "val_counts": {
+        "fn": 40,
+        "fp": 42,
+        "tn": 360,
+        "tp": 362
+      },
+      "val_f1": 0.8982630272952854,
+      "val_loss": 0.45752361935762625,
+      "val_precision": 0.8960396039603961,
+      "val_recall": 0.900497512437811,
+      "val_roc_auc": 0.9599762382119255,
+      "run_url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/runs/usp3ura0",
+      "checkpoint_sha256": "4ab702bb47bbd36f376d3d37e2bc82c9fc2595c2e7732efb3597ed3e320116b3",
+      "model_sha256": "d9371fdd92d93c8df393af785055edd6302921ffcbc5d525e94efe84cf3ff789"
+    },
+    {
+      "epochs_executed": 22,
+      "frozen_threshold": 0.009579099009671126,
+      "label": "E3",
+      "model": {
+        "activation": "relu",
+        "aggregation": "masked_mean",
+        "audio_dim": 256,
+        "dropout": 0.2,
+        "hidden_dims": [
+          512,
+          256,
+          128
+        ],
+        "initialization_seed": 42,
+        "temporal_bins": 10,
+        "visual_dim": 512
+      },
+      "parameter_count": 558081,
+      "selected_epoch": 17,
+      "train_loss": 0.00282548050677403,
+      "val_accuracy": 0.9104477611940298,
+      "val_average_precision": 0.968596681483803,
+      "val_counts": {
+        "fn": 21,
+        "fp": 51,
+        "tn": 351,
+        "tp": 381
+      },
+      "val_f1": 0.9136690647482014,
+      "val_loss": 0.4823463025377758,
+      "val_precision": 0.8819444444444444,
+      "val_recall": 0.9477611940298507,
+      "val_roc_auc": 0.9700193064528105,
+      "run_url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/runs/c7mvo4sd",
+      "checkpoint_sha256": "e7df0de86d873005728c142c3bd31729df803f4cc805110d82e375fb5d695925"
+    },
+    {
+      "epochs_executed": null,
+      "frozen_threshold": 0.32543530977887525,
+      "label": "JSD",
+      "method": "jensen_shannon",
+      "output_manifest_sha256": "c0a33292cd5c376f4c2267bbc91a4845c246c006d581abc9f400430a3d7b9110",
+      "parameter_count": 0,
+      "selected_epoch": null,
+      "train_accuracy": 0.9913147648996705,
+      "train_average_precision": 0.999947967824911,
+      "train_counts": {
+        "fn": 0,
+        "fp": 58,
+        "tn": 3281,
+        "tp": 3339
+      },
+      "train_f1": 0.9913895486935868,
+      "train_loss": null,
+      "train_precision": 0.9829261112746541,
+      "train_recall": 1,
+      "train_roc_auc": 0.9999484255023423,
+      "val_accuracy": 0.917910447761194,
+      "val_average_precision": 0.9728053582663733,
+      "val_counts": {
+        "fn": 36,
+        "fp": 30,
+        "tn": 372,
+        "tp": 366
+      },
+      "val_f1": 0.9172932330827067,
+      "val_loss": null,
+      "val_precision": 0.9242424242424242,
+      "val_recall": 0.9104477611940298,
+      "val_roc_auc": 0.9696418405485012,
+      "verified_same_inputs_and_pairing": true
+    }
+  ],
+  "differences": {
+    "A1": {
+      "E3": {
+        "val_average_precision": -0.020307780007988607,
+        "val_f1": -0.006605867722179082,
+        "val_roc_auc": -0.0156617410460137
+      },
+      "JSD": {
+        "val_average_precision": -0.024516456790558916,
+        "val_f1": -0.010230036056684377,
+        "val_roc_auc": -0.015284275141704384
+      },
+      "initial": {
+        "val_average_precision": -0.0027693367604370023,
+        "val_f1": 0.0043020925842456315,
+        "val_roc_auc": -0.0021162842503898993
+      }
+    },
+    "A2": {
+      "E3": {
+        "val_average_precision": -0.01020896182854858,
+        "val_f1": -0.00840590685346454,
+        "val_roc_auc": -0.00916437711937823
+      },
+      "JSD": {
+        "val_average_precision": -0.014417638611118888,
+        "val_f1": -0.012030075187969835,
+        "val_roc_auc": -0.008786911215068915
+      },
+      "initial": {
+        "val_average_precision": 0.0073294814190030255,
+        "val_f1": 0.0025020534529601735,
+        "val_roc_auc": 0.0043810796762455695
+      }
+    },
+    "A3": {
+      "E3": {
+        "val_average_precision": -0.013084586181329794,
+        "val_f1": -0.015406037452916022,
+        "val_roc_auc": -0.010043068240885078
+      },
+      "JSD": {
+        "val_average_precision": -0.017293262963900102,
+        "val_f1": -0.019030205787421317,
+        "val_roc_auc": -0.009665602336575763
+      },
+      "initial": {
+        "val_average_precision": 0.004453857066221811,
+        "val_f1": -0.004498077146491308,
+        "val_roc_auc": 0.0035023885547387223
+      }
+    },
+    "initial": {
+      "E3": {
+        "val_average_precision": -0.017538443247551605,
+        "val_f1": -0.010907960306424713,
+        "val_roc_auc": -0.0135454567956238
+      },
+      "JSD": {
+        "val_average_precision": -0.021747120030121914,
+        "val_f1": -0.014532128640930009,
+        "val_roc_auc": -0.013167990891314485
+      },
+      "initial": {
+        "val_average_precision": 0,
+        "val_f1": 0,
+        "val_roc_auc": 0
+      }
+    }
+  },
+  "phase5_runs": [
+    {
+      "label": "initial",
+      "local_evidence_root": "_local/fusion/phase5_training/run_20261024_seed42_01",
+      "run_id": "hiyb44br",
+      "run_url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/runs/hiyb44br",
+      "group": "phase5_bidirectional_cross_attention",
+      "artifact_versions": [
+        {
+          "digest": "022049d2af4ab7577694fa1a5b627fa1",
+          "name": "GC2-AValidate/avalidate/phase5-cross-attention-selected-checkpoint:v0",
+          "url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/artifacts/model/phase5-cross-attention-selected-checkpoint/v0"
+        },
+        {
+          "digest": "1816a59aa5a704276076619d7f6b6b39",
+          "name": "GC2-AValidate/avalidate/phase5-cross-attention-reproducibility-reports:v0",
+          "url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/artifacts/evaluation/phase5-cross-attention-reproducibility-reports/v0"
+        }
+      ],
+      "readiness_artifact": "GC2-AValidate/avalidate/phase5-cross-attention-online-readiness:v0",
+      "selected_checkpoint_sha256": "50fa1d9675c54485b207abe16be47ce7acc5f0a7fcce52df3b21934aa40ea088",
+      "selected_model_sha256": "0999caff3ae997d2a95bd7d1c7bf58c69c09b4d3eb43cf1257da7a0bc51c8bcb",
+      "optimizer_steps_total": 1470,
+      "optimizer_steps_selected_checkpoint": 945,
+      "code_sha256": "9968880cf2737a8937d3dbcbeea31129d5f8fa9edb43e907221c2c03c8a63d56",
+      "evidence_sha256": {
+        "baseline_comparison.json": "f798be94549b7c3fa747c2a1930f03bb51ce7289b618186d30d01bf4d9d35697",
+        "best.pt": "50fa1d9675c54485b207abe16be47ce7acc5f0a7fcce52df3b21934aa40ea088",
+        "checkpoint_integrity.json": "1e4d3abea7950eabc99faf1e829dd5584e98e9b5cbf7d54eaed4f1a6958d467b",
+        "checkpoint_metadata.json": "49edbdc70a4ec68d172e22525894f8a37cf47906b46c55b9040fd692b52116f2",
+        "checkpoint_reload.json": "46a840c93af54bd730651de7d94ede593cfeda2a61cac56590722a25fd404fc9",
+        "completion.json": "773bfc50f15596cca6e4b26f295568b96f0d7c58ebc939e8fedf4a4306a36914",
+        "config.json": "29dae961786a1b1128306d5e37960ee0e6d81aa43c5a2ecb24391ded36316c52",
+        "final_metrics.json": "59f7f0f0c62e4dfad08a2ae0640be0113d687fe636cb051607c51d01a2aba795",
+        "frozen_operating_point.json": "e0952f4fccf73b3089d1050864f015341da87b65c0208659c53da85430e83385",
+        "history.csv": "5e170ef4bb7ace2513e51558d047ec87a127936f9d038de947f6d4324504114a",
+        "history.json": "3a459f80d41f8daf3d86b036f53aeab4bf5ac6f8a70c56d04fc2931588eae5aa",
+        "input_verification.json": "24860d61e34d0cfc71307c1384cb5db1ba82388039a37f032d1a0dd9a703275d",
+        "output_manifest.json": "0a7c01ac8c13ce0c53e754b4b101bc5a29b4cb596a86195bd4c9ebfd8dd9f435",
+        "post_verification.json": "75799db893b08322ed8c1ad96155f29eeb682d75a595ea5b0e102895da85f16b",
+        "preregistration.json": "a9ce408c4d799e9bdc260b7e740188c531d11bf77cc5bebc88fbec7bc77ed68e",
+        "selected_validation_reference.json": "cbd883536723ca0091446e6e35bae68cf0d6e2689d56a20b2df17b5982adcbf5",
+        "selection.json": "6d9696ec4609e13ad19fe1eb970820e6834e7ef472bbc3bf18700483c5487b3d",
+        "source_code.zip": "a395610595aa0faacc57c366454c543077c6b020907281d6095a44eecf6790c2",
+        "state.json": "773bfc50f15596cca6e4b26f295568b96f0d7c58ebc939e8fedf4a4306a36914",
+        "tracking.json": "f63bd4bb087e9ddb5123ac8a696ddd41e71408780f2a0ba33ec9b76e67812703",
+        "tracking_probe.json": "6ef09fc49741b66cc60e6c2fba2df86f69152d4b24bb14939a09949a0a61e687",
+        "train_primary_scores.csv": "206a42394db5c78ed69b7d0be43f1af466cfa7fd7bc4182f43dae30e957d18fa",
+        "val_primary_scores.csv": "ed683ff06daadb17d1ca0f703dd237f51e262ec5d74a525d112071f5e6acb791"
+      }
+    },
+    {
+      "label": "A1",
+      "local_evidence_root": "_local/fusion/phase5_ablations/study_20261025_seed42_01/A1",
+      "run_id": "2wbi8en8",
+      "run_url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/runs/2wbi8en8",
+      "group": "phase5_cross_attention_ablations",
+      "artifact_versions": [
+        {
+          "digest": "c08f9bcee8a3f6c665bac9d779fa4a3b",
+          "name": "GC2-AValidate/avalidate/phase5-ablation-a1-selected-checkpoint:v0",
+          "url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/artifacts/model/phase5-ablation-a1-selected-checkpoint/v0"
+        },
+        {
+          "digest": "09f090bb2cfd1919baa4557f4e0f45db",
+          "name": "GC2-AValidate/avalidate/phase5-ablation-a1-reproducibility-reports:v0",
+          "url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/artifacts/evaluation/phase5-ablation-a1-reproducibility-reports/v0"
+        }
+      ],
+      "readiness_artifact": "GC2-AValidate/avalidate/phase5-ablation-a1-online-readiness:v0",
+      "selected_checkpoint_sha256": "f6d524882bb2843c65d4c37b2d615968e1f15fd7aa464bab1cd64e04c3803903",
+      "selected_model_sha256": "53f899261bf0cd31dab1ae1472dddddc9631dbdce2a12cf4ae73db519b524b80",
+      "optimizer_steps_total": 1470,
+      "optimizer_steps_selected_checkpoint": 945,
+      "code_sha256": "76f418cf841218d07d4514b91bc6f6328fd4d21b88b681e46af18dfe1023ffa4",
+      "evidence_sha256": {
+        "baseline_comparison.json": "93fd5ca41e71610888000515e36ff7ef96a44e4709285ebb705b84638f50dc58",
+        "best.pt": "f6d524882bb2843c65d4c37b2d615968e1f15fd7aa464bab1cd64e04c3803903",
+        "checkpoint_integrity.json": "ffe3f5aedbec1660110bb2ba44845baa37e633cfd339dbb638302cac568e04cf",
+        "checkpoint_metadata.json": "84d2c7c967dae4c6ef35be51e308ecadb6c105acbda121b9020875e0072945b4",
+        "checkpoint_reload.json": "6ec06da120727b1791c6c9215e105eb7cac4b0ce80c6c8e15d5a2761f2efbee2",
+        "completion.json": "ac9e2fe612452a0991879d8acc963f95583c5d47d9cd303b5a627c8af7d987ef",
+        "config.json": "9a57d7d24be8cbf7c510bb983873a871ffed63b57977d3a5011fa2b45dbaa1c0",
+        "final_metrics.json": "9a53101180520c2a8439790ed8f9da159f9f9d945c1c2b8497ad740903e894a2",
+        "frozen_operating_point.json": "aea07a8163de5f6912ddd02d7247f66527d380bc15cfa10894b0b2aad2ed6084",
+        "history.csv": "dd7d4c13f852e845fd9821e713f6cbda4afd2482452745ae8fbbd0f9ca86e678",
+        "history.json": "8e6a8df611ba7cbfd6a53fd64c19acaa3c3a6fa0a607bc854868fa31ae6e7f49",
+        "input_verification.json": "5fea98b21269001096ebfa9973693ff1e59a7f0b44c972d12bf1a46516b5bed4",
+        "output_manifest.json": "a04f28b774d08ddfef2aeb911c5eda652c1e21b1f7b4f93108a92998cce09080",
+        "post_verification.json": "75799db893b08322ed8c1ad96155f29eeb682d75a595ea5b0e102895da85f16b",
+        "preregistration.json": "485c26e307390cc6d6ed95092f55c35f4ba29f753474cbe97008ae6056b5b562",
+        "selected_validation_reference.json": "a595d30f04f2c50d2a16a7d0b54a9353141cbecfab6f6974adfd427b1c1406b0",
+        "selection.json": "dc6f9e30ba1fb7f623cf0ca355efc11a4b4e5f72d5b3220f1a03629851470295",
+        "source_code.zip": "2b80f0350d3bae05c117174df13698eb44330426bea9cdc1cbb1e36e8650c77b",
+        "state.json": "ac9e2fe612452a0991879d8acc963f95583c5d47d9cd303b5a627c8af7d987ef",
+        "tracking.json": "53138e070381f82f67d81081bb87c68474d9f3432d01bab48c7ec6be8a258216",
+        "tracking_probe.json": "6ef09fc49741b66cc60e6c2fba2df86f69152d4b24bb14939a09949a0a61e687",
+        "train_primary_scores.csv": "ddb66a09d0dfbfb065b0b8129dfa3c8feb92d1db9b8240b57f6a2ad22264b1d2",
+        "val_primary_scores.csv": "0be2473926ed4ed10af466d8f3556ace0f4e3349ccdb7ca5c774832679763a16"
+      }
+    },
+    {
+      "label": "A2",
+      "local_evidence_root": "_local/fusion/phase5_ablations/study_20261025_seed42_01/A2",
+      "run_id": "6mo5xu4k",
+      "run_url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/runs/6mo5xu4k",
+      "group": "phase5_cross_attention_ablations",
+      "artifact_versions": [
+        {
+          "digest": "fa86b288f5f88a7bbad18b148e007583",
+          "name": "GC2-AValidate/avalidate/phase5-ablation-a2-selected-checkpoint:v0",
+          "url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/artifacts/model/phase5-ablation-a2-selected-checkpoint/v0"
+        },
+        {
+          "digest": "2ea58a7dba0017da0e5889078ef507f1",
+          "name": "GC2-AValidate/avalidate/phase5-ablation-a2-reproducibility-reports:v0",
+          "url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/artifacts/evaluation/phase5-ablation-a2-reproducibility-reports/v0"
+        }
+      ],
+      "readiness_artifact": "GC2-AValidate/avalidate/phase5-ablation-a2-online-readiness:v0",
+      "selected_checkpoint_sha256": "0adf31d64d49e1917bca1ee4835aa2e40c506a41f7b7260a1dd1f68b62ec9c12",
+      "selected_model_sha256": "1ef5985f9de3e7b9f2994b076ebd16c1b0cd7d4922c0842d12d301aa202c2b8e",
+      "optimizer_steps_total": 2415,
+      "optimizer_steps_selected_checkpoint": 1890,
+      "code_sha256": "76f418cf841218d07d4514b91bc6f6328fd4d21b88b681e46af18dfe1023ffa4",
+      "evidence_sha256": {
+        "baseline_comparison.json": "8410701f8d145dde5eff18eb939d9f43dddebe5f6e7ccf61965d09447f380f01",
+        "best.pt": "0adf31d64d49e1917bca1ee4835aa2e40c506a41f7b7260a1dd1f68b62ec9c12",
+        "checkpoint_integrity.json": "5f4f65cbf75f4833f97cd7ba53491b3f4b78ec5be9dd088579bdacc8a616b2da",
+        "checkpoint_metadata.json": "aadd9c73e7675249f8192912656ca624aa6d77d50b10cea3f29a1968cce8d460",
+        "checkpoint_reload.json": "906b9972594fac01b6c7f77b4e813b9371a1d23c33b48b0ed76cb9afb1be96c4",
+        "completion.json": "85be61bbad699f6f61e56117559a3140f75c676c387d5671fe56caab035751f9",
+        "config.json": "9979ec7e217f4666b586d1bfceb58425f0512a0c1c1da03f7811491a421aa2c1",
+        "final_metrics.json": "ea823e3cbdba4b0dd78735d41f3df17d08a95247cdf581472304fcf84f66817a",
+        "frozen_operating_point.json": "16994e04c6a8421ec8bc22c1fac33691a4a0228ba544f6e57b0730f98c95b384",
+        "history.csv": "bf49b3ddb00bd08851b437c1397c3f9a3d08f860989f5442d731537846f7cd69",
+        "history.json": "41bf9c2f83b057ec593a0d1f98c3a78f7f37ed8e682492c72747f41b6d237be8",
+        "input_verification.json": "5fea98b21269001096ebfa9973693ff1e59a7f0b44c972d12bf1a46516b5bed4",
+        "output_manifest.json": "b0ca1ae21de3622a296a947571003f0d124c8a6e005ce09a90a7873d397597a6",
+        "post_verification.json": "75799db893b08322ed8c1ad96155f29eeb682d75a595ea5b0e102895da85f16b",
+        "preregistration.json": "f3896480f457944a5fec504b5a67c0c5247fe86b5a814c91a04f64f79820ea3e",
+        "selected_validation_reference.json": "58915ee8b1a1a9c1eb93fc0d771c10b6edecb8862de731e0488eaf1f01dd88bf",
+        "selection.json": "5848006182cb40613a00bda960a233ab9b8da19848aefcb1dc24bf2dcb15c2d3",
+        "source_code.zip": "2b80f0350d3bae05c117174df13698eb44330426bea9cdc1cbb1e36e8650c77b",
+        "state.json": "85be61bbad699f6f61e56117559a3140f75c676c387d5671fe56caab035751f9",
+        "tracking.json": "d28d2bad64b1b98792ed82675862e5f866d1caa90e482452a07464563aa15445",
+        "tracking_probe.json": "6ef09fc49741b66cc60e6c2fba2df86f69152d4b24bb14939a09949a0a61e687",
+        "train_primary_scores.csv": "2bd50ef86a859cbfde6eea3c0cc8526c18e8832c0f2e20e4998ab8f4d547d0c9",
+        "val_primary_scores.csv": "6cc1e8b0a91e5647767aaf1af43544a926d039e3ccb4a475a5baef981420f854"
+      }
+    },
+    {
+      "label": "A3",
+      "local_evidence_root": "_local/fusion/phase5_ablations/study_20261025_seed42_01/A3",
+      "run_id": "usp3ura0",
+      "run_url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/runs/usp3ura0",
+      "group": "phase5_cross_attention_ablations",
+      "artifact_versions": [
+        {
+          "digest": "402b4405f36b59cf1c180b97ddcec40b",
+          "name": "GC2-AValidate/avalidate/phase5-ablation-a3-selected-checkpoint:v0",
+          "url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/artifacts/model/phase5-ablation-a3-selected-checkpoint/v0"
+        },
+        {
+          "digest": "2ddc9e18add837195b9d5fa689cdd20b",
+          "name": "GC2-AValidate/avalidate/phase5-ablation-a3-reproducibility-reports:v0",
+          "url": "https://forge.coreweave.com/wandb/GC2-AValidate/avalidate/artifacts/evaluation/phase5-ablation-a3-reproducibility-reports/v0"
+        }
+      ],
+      "readiness_artifact": "GC2-AValidate/avalidate/phase5-ablation-a3-online-readiness:v0",
+      "selected_checkpoint_sha256": "4ab702bb47bbd36f376d3d37e2bc82c9fc2595c2e7732efb3597ed3e320116b3",
+      "selected_model_sha256": "d9371fdd92d93c8df393af785055edd6302921ffcbc5d525e94efe84cf3ff789",
+      "optimizer_steps_total": 1680,
+      "optimizer_steps_selected_checkpoint": 1155,
+      "code_sha256": "76f418cf841218d07d4514b91bc6f6328fd4d21b88b681e46af18dfe1023ffa4",
+      "evidence_sha256": {
+        "baseline_comparison.json": "2a3587eb26e8885847f2ad6ada013eb6723b0ee08f7d6b5cdc56cd170d8a1d10",
+        "best.pt": "4ab702bb47bbd36f376d3d37e2bc82c9fc2595c2e7732efb3597ed3e320116b3",
+        "checkpoint_integrity.json": "9244a16199ebdd2533551d873cdb386a5665b7700d7384f29218ec5cc240c75b",
+        "checkpoint_metadata.json": "976134137657b17ac7ea52176702d53fbf36c63286435a76a15039d8eb9aa657",
+        "checkpoint_reload.json": "911767e9f04972241bdaeb0d8b04dd0a740d786fc429c50634b36806a314a6ce",
+        "completion.json": "a2bf463588c4a96edfd94d527f70b00664ca5d7b093e0d011f01b1aa1113dfb0",
+        "config.json": "29a92bfaff1af02c16cf667c97c0ec1aa82faf7468983f85049673c7aa22ec32",
+        "final_metrics.json": "4c4ea7011ec586064b2be9818f09d756833a21e01ac5c1928099494f1350b54d",
+        "frozen_operating_point.json": "54e8eff7aef8ba88ed8db7079354841fdfb7c95f880733715adef5b3b484e462",
+        "history.csv": "a780c23b47a6098b21c638d8427906c8e84a6b41a4e71630021880c75ed15179",
+        "history.json": "507b5f52e5e3e1f86f3d28433528df5fd76898f3635ad6c1341995f5174f9eda",
+        "input_verification.json": "5fea98b21269001096ebfa9973693ff1e59a7f0b44c972d12bf1a46516b5bed4",
+        "output_manifest.json": "1927927a3aa0a52a26979d2bd9ccaebebe83000740ac1b602ad8fb543e3f6754",
+        "post_verification.json": "75799db893b08322ed8c1ad96155f29eeb682d75a595ea5b0e102895da85f16b",
+        "preregistration.json": "a52f89185d27f262c63604ed5a0caff403f1d332e7cd6fb0e7a5b80c1eacdab4",
+        "selected_validation_reference.json": "3ebe2a919bfaa39d11e1637be9027ea3bc20c14348872db21cbb2771e9925076",
+        "selection.json": "c8da52a2ba39a0694be0a12b3756bc74b32f2ee2f7025981cd4eca6cc1b48a5b",
+        "source_code.zip": "2b80f0350d3bae05c117174df13698eb44330426bea9cdc1cbb1e36e8650c77b",
+        "state.json": "a2bf463588c4a96edfd94d527f70b00664ca5d7b093e0d011f01b1aa1113dfb0",
+        "tracking.json": "14db209d28f87effa1e561ed03c299f6753af3fbb1abf6418dcdf62a4dec6fb3",
+        "tracking_probe.json": "6ef09fc49741b66cc60e6c2fba2df86f69152d4b24bb14939a09949a0a61e687",
+        "train_primary_scores.csv": "926d72c5ab695d4cb95d05c0c8aff65edaff41328864a7935fb71e1aa8160562",
+        "val_primary_scores.csv": "ce9a12ef5940f160d565d9208c1ff5bcdda87b166471662287e46ca663618de5"
+      }
+    }
+  ],
+  "protocol": {
+    "path": "_local/fusion/phase5_ablations/study_20261025_seed42_01/protocol.json",
+    "sha256": "33cfdb7e5dd8853e847ab1c2b6208c58923f181cd3e8caded4c6e92ad8e599f6",
+    "comparison_sha256": "034d0ebe044ad9cb56091a58d649bea5b4d755605fade173fb04cc65067068d7",
+    "source_archive_sha256": "2b80f0350d3bae05c117174df13698eb44330426bea9cdc1cbb1e36e8650c77b",
+    "attempts_sha256": "6f038e04d99ef53b45599a293eb8962f1bd0b918668318e492b25902aa4904ae",
+    "training": {
+      "batch_size": 64,
+      "class_balance": "unweighted",
+      "deterministic": true,
+      "device": "cpu",
+      "epochs": 30,
+      "max_gradient_norm": 5,
+      "num_workers": 0,
+      "optimizer": {
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "epsilon": 1e-8,
+        "learning_rate": 0.0003,
+        "name": "adamw",
+        "weight_decay": 0.01
+      },
+      "positive_weight": null,
+      "seed": 42,
+      "selection_metric": "roc_auc",
+      "selection_partition": "primary",
+      "selection_split": "val",
+      "source_overlap_policy": "official_annotation_split",
+      "training_split": "train",
+      "wandb_base_url": "https://api.forge.coreweave.com",
+      "wandb_entity": "GC2-AValidate",
+      "wandb_project": "avalidate"
+    },
+    "cpu_threads": 4,
+    "patience": 5,
+    "real_experiments": 3,
+    "no_restarts": true
+  },
+  "data": {
+    "artifact_inventory_fingerprint": "c8ec1448ab79e7c5fcc044678e9375bece168c7f2adfbbe5fa7a57c0ca957949",
+    "held_out_scope": "opaque integrity hashes only; no test labels, arrays, pairs or predictions parsed",
+    "manifest_sha256": {
+      "train": "52709d93ed00f06912dbede6b21de32f1a06634005ca7e964e42278c3bea734f",
+      "val": "0ef344fa96e64d4ee7f44bee4082a2b1ad5c881504040c306cf6d00172322178"
+    },
+    "original_row_references_match_e3_and_jsd": true,
+    "scoped_manifest_context": "all-split leakage context opaque; every pair/local field regenerated exactly",
+    "train_primary": {
+      "count": 6678,
+      "positives": 3339
+    },
+    "train_validation_source_overlap": [
+      "-GJvu5hr6w4",
+      "00N83yxKYUI",
+      "0j6rg-m7C5g",
+      "1n7amzH3-1E",
+      "1u3hR1PNYf4",
+      "2Fkh-PUx2SA",
+      "2qVuxENcRvw",
+      "3s0QRMuXTnE",
+      "6OSEf-W1gmc",
+      "7PZl6hYrQGo"
+    ],
+    "val_primary": {
+      "count": 804,
+      "positives": 402
+    },
+    "validation_challenge": {
+      "evaluated": false,
+      "features_gathered": false,
+      "manifest_count": 402
+    }
+  },
+  "data_provenance": [
+    {
+      "artifact_fingerprint": "c8ec1448ab79e7c5fcc044678e9375bece168c7f2adfbbe5fa7a57c0ca957949",
+      "input_export_hashes": [
+        [
+          "audio/README.md",
+          "d6cd75eaf3ba285e6df2945da46045dd7331aa57781d1fc484da83182db99d80"
+        ],
+        [
+          "audio/SOURCE.txt",
+          "7645155bb730d8287b8a2b83bd33427885487dfd8fec2a695ecd9028fbb6c9cf"
+        ],
+        [
+          "audio/class_names.json",
+          "84d4763979cefd73af2248743067e1e48f368d908a701237e8d3616757921100"
+        ],
+        [
+          "audio/train_emb.npy",
+          "29b59352b293abee1814d6a61900433d5379ae7355c050688ee79b2519a13da9"
+        ],
+        [
+          "audio/train_ids.csv",
+          "f7aba073c6a78bb080cd199b92a37e2365c1c0b3c3ea5e00beaa8db6d9cf56f5"
+        ],
+        [
+          "audio/train_probs.npy",
+          "07f1ccd454dee5a5227debee5120252c1d6060071dba1ba2e01befadd71353e0"
+        ],
+        [
+          "audio/val_emb.npy",
+          "0707b6bf89569a6dfdc1a87f6de5eeefe338b688b9948c61f266a81bee884dde"
+        ],
+        [
+          "audio/val_ids.csv",
+          "b2f26036715f6ec0adfaea4d858f68e812e94f8c836065c3c8e6f6adb59b9bc3"
+        ],
+        [
+          "audio/val_probs.npy",
+          "4da0ebb87986e8abd4b6a751d6293bc9fef73c08c4c664e8bb0033abab4a7d07"
+        ],
+        [
+          "vision/README.md",
+          "41d1ea6c5a532018785e446b50c78ed48a6b09687c2845d28915cafd8540438f"
+        ],
+        [
+          "vision/SOURCE.txt",
+          "7c50090a570bbeeb0eb915f8b2cf7511fa20fc64d48b708fefb56e86567a7904"
+        ],
+        [
+          "vision/class_names.json",
+          "05abcc9bba8940f745c2a6842fc268a0f25a5e689f4e1f70193aaa18d00908ac"
+        ],
+        [
+          "vision/train_emb.npy",
+          "bb1f0373c1820ae932e0a9e5732bd47ae51c641ae86271207a929b044ca7575d"
+        ],
+        [
+          "vision/train_ids.csv",
+          "66e1e80ba8a08b1517c89cb85a1739de1b013d8f0fe2398b7dd498546c55a884"
+        ],
+        [
+          "vision/train_probs.npy",
+          "0ef956002f2dab009c7f6036e060b0f587e2d4440add4c85b2a3eef6332074bb"
+        ],
+        [
+          "vision/val_emb.npy",
+          "cfe3a1b750c372eb8c333124e54b04f4aa40a686e5b6fa1102d23b82a9f04208"
+        ],
+        [
+          "vision/val_ids.csv",
+          "2da2063a480ce4b4dfd89def2a880f5d239205bbc145f1ac63a2242dd66f2684"
+        ],
+        [
+          "vision/val_probs.npy",
+          "aefbfaa0ba2d54784948c93d272ec315e35a363f868c1003040afe7455413dcc"
+        ]
+      ],
+      "manifest_sha256": "52709d93ed00f06912dbede6b21de32f1a06634005ca7e964e42278c3bea734f",
+      "policy_fingerprint": "c6a62ea473a32ed9267f0b5f5941bef929cfec4543829797647e464bd70a9da2",
+      "source_array_hashes": [
+        [
+          "audio/train/embeddings",
+          "f4c8e74c0011c5794f778d151abc3b47e56654202e2e7b6d7973f0d35f7649e2"
+        ],
+        [
+          "audio/train/validity",
+          "65b706581297cc5beb78c50895435b6fa33fce30da0c73652b96a03d07d38258"
+        ],
+        [
+          "vision/train/embeddings",
+          "30c77d39dd88f733efcee8a992b359be1a99f778383b682b67b3fc05f5a9a1cd"
+        ],
+        [
+          "vision/train/validity",
+          "65b706581297cc5beb78c50895435b6fa33fce30da0c73652b96a03d07d38258"
+        ]
+      ],
+      "split": "train"
+    },
+    {
+      "artifact_fingerprint": "c8ec1448ab79e7c5fcc044678e9375bece168c7f2adfbbe5fa7a57c0ca957949",
+      "input_export_hashes": [
+        [
+          "audio/README.md",
+          "d6cd75eaf3ba285e6df2945da46045dd7331aa57781d1fc484da83182db99d80"
+        ],
+        [
+          "audio/SOURCE.txt",
+          "7645155bb730d8287b8a2b83bd33427885487dfd8fec2a695ecd9028fbb6c9cf"
+        ],
+        [
+          "audio/class_names.json",
+          "84d4763979cefd73af2248743067e1e48f368d908a701237e8d3616757921100"
+        ],
+        [
+          "audio/train_emb.npy",
+          "29b59352b293abee1814d6a61900433d5379ae7355c050688ee79b2519a13da9"
+        ],
+        [
+          "audio/train_ids.csv",
+          "f7aba073c6a78bb080cd199b92a37e2365c1c0b3c3ea5e00beaa8db6d9cf56f5"
+        ],
+        [
+          "audio/train_probs.npy",
+          "07f1ccd454dee5a5227debee5120252c1d6060071dba1ba2e01befadd71353e0"
+        ],
+        [
+          "audio/val_emb.npy",
+          "0707b6bf89569a6dfdc1a87f6de5eeefe338b688b9948c61f266a81bee884dde"
+        ],
+        [
+          "audio/val_ids.csv",
+          "b2f26036715f6ec0adfaea4d858f68e812e94f8c836065c3c8e6f6adb59b9bc3"
+        ],
+        [
+          "audio/val_probs.npy",
+          "4da0ebb87986e8abd4b6a751d6293bc9fef73c08c4c664e8bb0033abab4a7d07"
+        ],
+        [
+          "vision/README.md",
+          "41d1ea6c5a532018785e446b50c78ed48a6b09687c2845d28915cafd8540438f"
+        ],
+        [
+          "vision/SOURCE.txt",
+          "7c50090a570bbeeb0eb915f8b2cf7511fa20fc64d48b708fefb56e86567a7904"
+        ],
+        [
+          "vision/class_names.json",
+          "05abcc9bba8940f745c2a6842fc268a0f25a5e689f4e1f70193aaa18d00908ac"
+        ],
+        [
+          "vision/train_emb.npy",
+          "bb1f0373c1820ae932e0a9e5732bd47ae51c641ae86271207a929b044ca7575d"
+        ],
+        [
+          "vision/train_ids.csv",
+          "66e1e80ba8a08b1517c89cb85a1739de1b013d8f0fe2398b7dd498546c55a884"
+        ],
+        [
+          "vision/train_probs.npy",
+          "0ef956002f2dab009c7f6036e060b0f587e2d4440add4c85b2a3eef6332074bb"
+        ],
+        [
+          "vision/val_emb.npy",
+          "cfe3a1b750c372eb8c333124e54b04f4aa40a686e5b6fa1102d23b82a9f04208"
+        ],
+        [
+          "vision/val_ids.csv",
+          "2da2063a480ce4b4dfd89def2a880f5d239205bbc145f1ac63a2242dd66f2684"
+        ],
+        [
+          "vision/val_probs.npy",
+          "aefbfaa0ba2d54784948c93d272ec315e35a363f868c1003040afe7455413dcc"
+        ]
+      ],
+      "manifest_sha256": "0ef344fa96e64d4ee7f44bee4082a2b1ad5c881504040c306cf6d00172322178",
+      "policy_fingerprint": "c6a62ea473a32ed9267f0b5f5941bef929cfec4543829797647e464bd70a9da2",
+      "source_array_hashes": [
+        [
+          "audio/val/embeddings",
+          "c9851e3c9a77655bf8f6d288471094812ad52a80b953a0eae79e222c82feb6aa"
+        ],
+        [
+          "audio/val/validity",
+          "70eccbfd6f79f40652ea5c3169eb85ff6b5f639aff80aeb1eefd282c162c1f6a"
+        ],
+        [
+          "vision/val/embeddings",
+          "7e130ca869cc7556246ee5b9f78fc28bef09b9cc9fda39f0006dab466c067c89"
+        ],
+        [
+          "vision/val/validity",
+          "70eccbfd6f79f40652ea5c3169eb85ff6b5f639aff80aeb1eefd282c162c1f6a"
+        ]
+      ],
+      "split": "val"
+    }
+  ],
+  "frozen_source_files": [
+    {
+      "role": "fusion/__init__.py",
+      "sha256": "caecf710efe5a6de96d47076d7192f52ddf297af4cf2ecb869df92ff17256043",
+      "size_bytes": 586
+    },
+    {
+      "role": "fusion/artifact_integration.py",
+      "sha256": "6779974003d22cd75ac876d39e4b9361404f38d6dc4e07e576ad3dae0f4d8670",
+      "size_bytes": 22168
+    },
+    {
+      "role": "fusion/baseline_data.py",
+      "sha256": "546b7d7c34948ae34bc83dbb36fa40b4bae2cc56d6df694f0f0d8fa27416d6be",
+      "size_bytes": 4994
+    },
+    {
+      "role": "fusion/baseline_evaluation.py",
+      "sha256": "55f7cf2072abd862ecd488032d3ce5105abe4f0e89ddf72cbb69b7edafad3e41",
+      "size_bytes": 8118
+    },
+    {
+      "role": "fusion/baseline_metrics.py",
+      "sha256": "6bc00c2b927d457a68037f66914951392eb1e194282763e7335f1f995504d8b6",
+      "size_bytes": 8334
+    },
+    {
+      "role": "fusion/baseline_protocol.py",
+      "sha256": "cf63947c39f4e02e950ad20a37ebf6644b7a09a6afa280717e37e98b5c27a16f",
+      "size_bytes": 8076
+    },
+    {
+      "role": "fusion/baseline_thresholds.py",
+      "sha256": "0191cf6ce43b716e1a7f5247ab2bc73d02e8e2e80c1d41a6c452053d2a651beb",
+      "size_bytes": 11385
+    },
+    {
+      "role": "fusion/baseline_tracking.py",
+      "sha256": "71a96b3dbcf52e86dafc53262ca8f5b3bb823bf7e269077f6bfc77f01d0fd0c6",
+      "size_bytes": 6138
+    },
+    {
+      "role": "fusion/baselines.py",
+      "sha256": "d5f6352b598b607dfd88065bd3a6dbaac3e45c51ac0661fe10818e74ac4853b7",
+      "size_bytes": 4711
+    },
+    {
+      "role": "fusion/contracts.py",
+      "sha256": "384553b059c14fc754102b9553e0e14a2c38c4291763cbd79bb855b4d1ea266f",
+      "size_bytes": 32754
+    },
+    {
+      "role": "fusion/cross_attention_ablations.py",
+      "sha256": "24ad513c9a8d6e331dfb4b981d86e13830b20c9f704b657a2307f35918fa19a7",
+      "size_bytes": 17061
+    },
+    {
+      "role": "fusion/cross_attention_model.py",
+      "sha256": "2e9ee2eece9959d57a835510f1c58fd890d3bb8b3ca49eb2448a9120aa71cd56",
+      "size_bytes": 12090
+    },
+    {
+      "role": "fusion/cross_attention_tracking.py",
+      "sha256": "232735b6f23185cd962178b71949a17b78a538e79eba5a51a386dcf54a01e942",
+      "size_bytes": 897
+    },
+    {
+      "role": "fusion/embedding_data.py",
+      "sha256": "845c6950413038dc3602e08179a09a89e7e5f1efd6ab7fc843f744f23c9caf4c",
+      "size_bytes": 11218
+    },
+    {
+      "role": "fusion/mlp_model.py",
+      "sha256": "a715e57aed79d234ac8fe6eca0bd9cb73276db621f6776c8169c9f88c384e2d5",
+      "size_bytes": 5623
+    },
+    {
+      "role": "fusion/mlp_study.py",
+      "sha256": "00301178776eed263f7ace23283940f7717b648ddf48f6afced73d924a394e7e",
+      "size_bytes": 28273
+    },
+    {
+      "role": "fusion/mlp_tracking.py",
+      "sha256": "726c243a33e77144c98131a838ab8fc57ac9569a09b76b752fecbe77c00fcf55",
+      "size_bytes": 13368
+    },
+    {
+      "role": "fusion/mlp_training.py",
+      "sha256": "fa5ac9f004a2af9343638cf81c7ed079c0f0f91ca035c8c803791cdaa2298bae",
+      "size_bytes": 14006
+    },
+    {
+      "role": "fusion/model_interface.py",
+      "sha256": "1344b34c29afa87848067c60a500eff9c25f476c388859669b5838ba6a681a20",
+      "size_bytes": 7001
+    },
+    {
+      "role": "fusion/pair_contracts.py",
+      "sha256": "61c0698c2456141285e1038d319e251a1b58164c9027e149448deb2720d24292",
+      "size_bytes": 17408
+    },
+    {
+      "role": "fusion/pair_generator.py",
+      "sha256": "01c8bc6a9369d9a6dfba59b5dc2eaa46b960b4265afd54c4709388ffc33acb83",
+      "size_bytes": 19685
+    },
+    {
+      "role": "fusion/pair_integrity.py",
+      "sha256": "341fec6cb9e568517a25fb2ec58965ffb572a86b0af0a5f2646eb5076f7d6373",
+      "size_bytes": 6217
+    },
+    {
+      "role": "fusion/run_baseline_experiments.py",
+      "sha256": "33fd1e21bab59757fafaa4d1cc3853ae4e250e883e11294e8542f77a0cca3cd6",
+      "size_bytes": 24485
+    },
+    {
+      "role": "fusion/smoke_cross_attention.py",
+      "sha256": "102f77afa97285c0d7c0fcf31696707df771e1fc28900c7938494d8dc072d934",
+      "size_bytes": 1285
+    },
+    {
+      "role": "fusion/smoke_mlp.py",
+      "sha256": "e1008b8164a4d6a8f1377507d3227ab70f388941861f1dfcf186a7fc0ba9d990",
+      "size_bytes": 9538
+    },
+    {
+      "role": "fusion/train_cross_attention.py",
+      "sha256": "adb65032bf41024af783fa8d0377769054866c045828baad47cf93118747a91d",
+      "size_bytes": 19619
+    },
+    {
+      "role": "fusion/train_mlp.py",
+      "sha256": "aee6db52b8a69018ee8fe49985eddf2ac730803a8cf9cd7c86bbc5ac27f2c2ca",
+      "size_bytes": 40194
+    },
+    {
+      "role": "fusion/training_contracts.py",
+      "sha256": "c67e0fa9fbff0ce789b7e907e9a3743f8b66f74fe785b3977628e4924fbc4deb",
+      "size_bytes": 20860
+    },
+    {
+      "role": "fusion/verify_ave_reference.py",
+      "sha256": "a6181a70fcfcb7f44157eab89b27526a5d2abe7b5d571d4e6cd6178690eed6c8",
+      "size_bytes": 11086
+    },
+    {
+      "role": "requirements-fusion-mlp.txt",
+      "sha256": "96f54940e2047bbac1541fc3e81d71512b3aae1f72d06876f8e55a6246636585",
+      "size_bytes": 125
+    },
+    {
+      "role": "requirements-fusion-training.txt",
+      "sha256": "a01116f4399965d31d989d92ec8d14a07cd518b55208d42a9081efd91f2848ab",
+      "size_bytes": 137
+    },
+    {
+      "role": "requirements-fusion.txt",
+      "sha256": "ac12aa077b1c95f106e79f0222b717140e1d1e7aa2aa3892ef34a1951dd36a7c",
+      "size_bytes": 93
+    }
+  ],
+  "verification": {
+    "previous_independent_ablation_audit": "PASS WITH WARNINGS",
+    "previous_suite": {
+      "tests": 478,
+      "passes": 476,
+      "cuda_skips": 2,
+      "duration_seconds": 44.008
+    },
+    "current_suite": {
+      "command": ".\\.venv\\Scripts\\python.exe -B -m unittest discover -s tests -v",
+      "status": "FAILED_AT_MODULE_IMPORT",
+      "discovery_entries": 319,
+      "passes": 312,
+      "import_errors": 7,
+      "duration_seconds": 54.514,
+      "environment_error": "OSError WinError 4551: Windows Application Control blocked loading torch/lib/c10.dll or a dependency",
+      "checkpoint_replay": "BLOCKED_BY_SAME_PYTORCH_IMPORT_ERROR",
+      "outside_sandbox_import_probe": "SAME_ERROR"
+    },
+    "saved_validation_predictions_recomputed_without_torch": "PASS",
+    "all_six_804_validation_references_identical": true,
+    "local_phase5_output_manifests_and_evidence_hashes": "PASS",
+    "source_manifests_unchanged": "PASS",
+    "historical_protected_files": 280,
+    "historical_protected_bytes": 126941543,
+    "historical_snapshot_sha256": "98f89212ee4703a789bdcef39f3696b4e987d0c346b6f05eca1697d477cea571",
+    "initial_run_preserved_files": 23,
+    "initial_run_snapshot_sha256": "39c2df668e856511d0d59cfb9f17f1ae200deb7dcb405b256c9504534d6a3de8",
+    "live_forge_verification": {
+      "status": "PASS",
+      "runs": [
+        {
+          "label": "initial",
+          "run_id": "hiyb44br",
+          "state": "finished",
+          "epoch_rows": 14,
+          "artifact_files_sha256_verified": 22,
+          "configuration_summary_and_pinned_versions": "PASS"
+        },
+        {
+          "label": "A1",
+          "run_id": "2wbi8en8",
+          "state": "finished",
+          "epoch_rows": 14,
+          "artifact_files_sha256_verified": 22,
+          "configuration_summary_and_pinned_versions": "PASS"
+        },
+        {
+          "label": "A2",
+          "run_id": "6mo5xu4k",
+          "state": "finished",
+          "epoch_rows": 23,
+          "artifact_files_sha256_verified": 22,
+          "configuration_summary_and_pinned_versions": "PASS"
+        },
+        {
+          "label": "A3",
+          "run_id": "usp3ura0",
+          "state": "finished",
+          "epoch_rows": 16,
+          "artifact_files_sha256_verified": 22,
+          "configuration_summary_and_pinned_versions": "PASS"
+        }
+      ],
+      "total_artifact_files_sha256_md5_verified": 88,
+      "new_runs_or_artifact_versions": 0
+    },
+    "static_checks": {
+      "python_syntax_files": 16,
+      "credential_pattern_check": "PASS",
+      "phases_1_to_4_modules_present": true,
+      "pip_check": "PASS",
+      "index_empty": true
+    },
+    "prior_audits": {
+      "foundation": "Remediated and independently re-audited before real training",
+      "initial_training": "Passed with scientific warnings; 804 logits reproduced exactly",
+      "controlled_ablations": "PASS WITH WARNINGS; 804 logits reproduced exactly for each variant; 66 remote files verified",
+      "current_freeze": "Saved metrics, source/evidence hashes and 88 remote artifact files verified; fresh PyTorch execution blocked"
+    }
+  },
+  "boundaries": {
+    "additional_training": false,
+    "hyperparameter_or_architecture_search": false,
+    "challenge_inference": false,
+    "test_inference": false,
+    "new_forge_runs_or_artifact_versions": false,
+    "historical_evidence_rewritten": false,
+    "gc1_access": false,
+    "statistical_significance_claim": false
+  },
+  "git": {
+    "repository": "NUS-AIS-GCs/Audio-Video-Confidence",
+    "branch": "feature/fusion-phase5-cross-attention",
+    "head": "38d4171d1b9c6aefab476a87fa8fc144999191d9",
+    "fetched_main": "467c7568def85d3f9270756ce1ce98d861958c45",
+    "fetched_phase4": "76add86568daed6f7dbb31659f26c020b264962c",
+    "phase4_included_in_head": true,
+    "phase4_in_main": false,
+    "main_head_ahead_behind": "0\t2",
+    "commits_not_in_main": [
+      "38d4171d1b9c6aefab476a87fa8fc144999191d9 Merge branch 'feature/fusion-phase4-mlp' into feature/fusion-phase5-cross-attention",
+      "76add86568daed6f7dbb31659f26c020b264962c feat(fusion): add audited learned MLP training and controlled improvement study"
+    ],
+    "committed_main_diff": [
+      "A\tdocs/fusion_learned_foundation.md",
+      "A\tdocs/fusion_mlp_improvement.md",
+      "A\tdocs/fusion_mlp_training.md",
+      "A\tfusion/embedding_data.py",
+      "A\tfusion/mlp_model.py",
+      "A\tfusion/mlp_study.py",
+      "A\tfusion/mlp_tracking.py",
+      "A\tfusion/mlp_training.py",
+      "A\tfusion/smoke_mlp.py",
+      "A\tfusion/train_mlp.py",
+      "A\tfusion/training_contracts.py",
+      "A\trequirements-fusion-mlp.txt",
+      "M\ttests/test_fusion_baseline_experiments.py",
+      "A\ttests/test_fusion_mlp.py",
+      "A\ttests/test_fusion_mlp_study.py",
+      "A\ttests/test_fusion_mlp_training.py"
+    ],
+    "committed_main_diff_stat": "docs/fusion_learned_foundation.md         | 370 +++++++++++++++++++\n docs/fusion_mlp_improvement.md            | 212 +++++++++++\n docs/fusion_mlp_training.md               | 335 +++++++++++++++++\n fusion/embedding_data.py                  | 174 +++++++++\n fusion/mlp_model.py                       | 105 ++++++\n fusion/mlp_study.py                       | 433 ++++++++++++++++++++++\n fusion/mlp_tracking.py                    | 226 ++++++++++++\n fusion/mlp_training.py                    | 267 ++++++++++++++\n fusion/smoke_mlp.py                       | 134 +++++++\n fusion/train_mlp.py                       | 575 ++++++++++++++++++++++++++++++\n fusion/training_contracts.py              | 401 +++++++++++++++++++++\n requirements-fusion-mlp.txt               |   3 +\n tests/test_fusion_baseline_experiments.py |  47 +++\n tests/test_fusion_mlp.py                  | 503 ++++++++++++++++++++++++++\n tests/test_fusion_mlp_study.py            | 398 +++++++++++++++++++++\n tests/test_fusion_mlp_training.py         | 527 +++++++++++++++++++++++++++\n 16 files changed, 4710 insertions(+)",
+    "committed_phase4_to_head_tree_diff": "",
+    "phase5_modified_files": [
+      "fusion/embedding_data.py",
+      "fusion/mlp_study.py",
+      "fusion/mlp_tracking.py",
+      "fusion/smoke_mlp.py",
+      "fusion/train_mlp.py",
+      "fusion/training_contracts.py"
+    ],
+    "phase5_new_files": [
+      "docs/fusion_cross_attention_ablations.md",
+      "docs/fusion_cross_attention_comparison.md",
+      "docs/fusion_cross_attention_foundation.md",
+      "docs/fusion_cross_attention_phase5_freeze.json",
+      "docs/fusion_cross_attention_phase5_summary.md",
+      "docs/fusion_cross_attention_training.md",
+      "fusion/cross_attention_ablations.py",
+      "fusion/cross_attention_model.py",
+      "fusion/cross_attention_tracking.py",
+      "fusion/model_interface.py",
+      "fusion/smoke_cross_attention.py",
+      "fusion/train_cross_attention.py",
+      "tests/test_fusion_checkpoint_binding.py",
+      "tests/test_fusion_cross_attention.py",
+      "tests/test_fusion_cross_attention_ablations.py",
+      "tests/test_fusion_cross_attention_training.py"
+    ],
+    "preexisting_untracked_requirements": {
+      "path": "requirements-fusion-training.txt",
+      "sha256": "a01116f4399965d31d989d92ec8d14a07cd518b55208d42a9081efd91f2848ab",
+      "preserve_untracked": true
+    },
+    "tracked_working_diff_numstat": "44\t4\tfusion/embedding_data.py\n11\t2\tfusion/mlp_study.py\n12\t7\tfusion/mlp_tracking.py\n26\t2\tfusion/smoke_mlp.py\n84\t21\tfusion/train_mlp.py\n11\t7\tfusion/training_contracts.py",
+    "tracked_working_diff_stat": "fusion/embedding_data.py     |  48 ++++++++++++++++++--\n fusion/mlp_study.py          |  13 +++++-\n fusion/mlp_tracking.py       |  19 +++++---\n fusion/smoke_mlp.py          |  28 +++++++++++-\n fusion/train_mlp.py          | 105 ++++++++++++++++++++++++++++++++++---------\n fusion/training_contracts.py |  18 +++++---\n 6 files changed, 188 insertions(+), 43 deletions(-)",
+    "index_empty": true,
+    "preferred_merge_sequence": [
+      "Phase 4 to main",
+      "synchronize Phase 5 with main",
+      "Phase 5 to main"
+    ],
+    "history_changes_performed": false,
+    "fetch_performed": true,
+    "main_only_commits": 0,
+    "head_only_commits": 2,
+    "phase5_has_no_fetched_remote_tracking_ref": true,
+    "eventual_pr_includes_phase4_until_dependency_merged": true,
+    "phase5_intended_file_count": 22
+  },
+  "scientific_limitations": [
+    "Single initialization/training seed; no statistical significance claim.",
+    "Primary development validation reused for epoch, threshold and architecture selection.",
+    "Ten source-video IDs overlap between official TRAIN and validation annotation splits.",
+    "Unequal model capacities; topology changes initialization and dropout draw placement.",
+    "Ten original one-second embedding bins limit temporal resolution.",
+    "Attention same-category mismatch challenge has not been evaluated.",
+    "No held-out TEST evaluation.",
+    "Pairing-provenance targets and attention maps do not prove physical sound-source identity or causality.",
+    "Scores lack independent calibration evidence; E3 uses its own prespecified training protocol."
+  ]
+}

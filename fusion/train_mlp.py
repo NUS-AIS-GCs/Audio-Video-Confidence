@@ -23,6 +23,9 @@ from .baseline_tracking import TrackingUnavailable, safe_failure
 from .contracts import ContractError, OFFICIAL_COUNTS
 from .embedding_data import EmbeddingDataset
 from .mlp_model import LateFusionMLP, MLPConfig
+from .model_interface import (
+    build_model, model_binding, validate_live_model, validate_model_binding, validate_model_state,
+)
 from .mlp_tracking import ForgeMLPTracker, GROUP, STUDY_GROUP
 from .mlp_training import (
     EarlyStopping, evaluate_frozen, fit_operating_point, model_fingerprint,
@@ -245,14 +248,20 @@ def prepare_inputs(config):
 
 def save_checkpoint(output, model, optimizer, metadata):
     """Only our own fresh ignored output is written; payload uses safe-load types."""
+    if type(metadata) is not CheckpointMetadata:
+        raise ContractError("checkpoint requires validated CheckpointMetadata")
     metadata.__post_init__()
+    # Validate before any output write. Shape-compatible weights cannot prove
+    # head count, dropout, activation, or whether a fixed buffer was altered.
+    validate_live_model(model, metadata.model)
     path = output / "best.pt"
     temporary = output / "best.pt.tmp"
     torch.save({"model_state": {k: v.detach().cpu() for k, v in model.state_dict().items()},
                 "optimizer_state": optimizer.state_dict(), "epoch": metadata.epoch,
                 "optimizer_steps": metadata.optimizer_steps,
                 "model_sha256": model_fingerprint(model),
-                "experiment_fingerprint": metadata.experiment_fingerprint}, temporary)
+                "experiment_fingerprint": metadata.experiment_fingerprint,
+                "model_binding": model_binding(metadata.model)}, temporary)
     temporary.replace(path)
     _write(output, "checkpoint_metadata.json", metadata.to_dict())
     evidence = _file_entry("best.pt", path)
@@ -275,8 +284,22 @@ def load_selected_checkpoint(output, *, expected_metadata=None):
     if any(actual[k] != expected[k] for k in ("role", "sha256", "size_bytes")):
         raise ContractError("checkpoint hash/size changed before loading")
     payload = torch.load(output / "best.pt", map_location="cpu", weights_only=True)
-    model = LateFusionMLP(metadata.model)
-    model.load_state_dict(payload["model_state"], strict=True)
+    required = {"model_state", "optimizer_state", "epoch", "optimizer_steps",
+                "model_sha256", "experiment_fingerprint"}
+    if (type(payload) is not dict or not required <= set(payload)
+            or set(payload) - required - {"model_binding"}):
+        raise ContractError("malformed checkpoint payload")
+    if "model_binding" in payload:
+        validate_model_binding(payload["model_binding"], metadata.model)
+    elif type(metadata.model) is not MLPConfig:
+        # Historical Phase 4 files predate explicit binding. No such fallback
+        # is allowed for the new attention architecture.
+        raise ContractError("attention checkpoints require explicit model binding")
+    model = validate_model_state(build_model(metadata.model), payload["model_state"])
+    try:
+        model.load_state_dict(payload["model_state"], strict=True)
+    except (RuntimeError, TypeError, ValueError) as exc:
+        raise ContractError("checkpoint state cannot be loaded into declared architecture") from exc
     if (payload["epoch"] != metadata.selected_epoch or payload["optimizer_steps"] != metadata.optimizer_steps
             or payload["experiment_fingerprint"] != metadata.experiment_fingerprint
             or payload["model_sha256"] != model_fingerprint(model)):
@@ -295,9 +318,9 @@ def _score_csv(predictions, dataset):
     return stream.getvalue()
 
 
-def _verify_output_manifest(output):
+def _verify_output_manifest(output, *, schema=SCHEMA):
     manifest = _read(output / "output_manifest.json")
-    if manifest.get("schema") != SCHEMA:
+    if manifest.get("schema") != schema:
         raise ContractError("output evidence schema mismatch")
     names = [entry["role"] for entry in manifest["files"]]
     if len(set(names)) != len(names) or names != sorted(names):
@@ -331,26 +354,46 @@ def _comparison(train, validation, challenge, baseline):
 def run_experiment(config: MLPExperimentConfig, *, tracker_factory=ForgeMLPTracker, progress=print):
     if type(config) is not MLPExperimentConfig:
         raise ContractError("expected MLPExperimentConfig")
-    git = _repository()
+    return _run_experiment(config, tracker_factory=tracker_factory, progress=progress)
+
+
+def _run_experiment(config, *, tracker_factory, progress, repository=None, data_factory=None,
+                    comparison_factory=None, schema=SCHEMA, freeze_run=None):
+    """Shared guarded lifecycle; architecture entry points own their strict policy."""
+    git = (repository or _repository)()
     source_paths, source_before = _source_inventory()
     code_sha256 = _fingerprint(_portable(source_before))
     output = config.output_dir
     output.mkdir(parents=True, exist_ok=False)
     tracker = tracker_factory(output)
-    state = {"schema": SCHEMA, "status": "RUNNING", "stage": "VERIFYING_INPUTS",
+    state = {"schema": schema, "status": "RUNNING", "stage": "VERIFYING_INPUTS",
              "optimization_started": False, "completed_epochs": 0, "optimizer_steps_recorded": 0,
              "exact_resume_supported": False}
     _write(output, "state.json", state)
     history, selected_metadata = [], None
     old_threads = torch.get_num_threads()
+    def evaluate(model, dataset, **kwargs):
+        if freeze_run is None:
+            return predict(model, dataset, config.training, **kwargs)
+        # Some CPU attention/linear kernels dispatch differently when parameter
+        # requires_grad flags change, even in inference_mode. Use the selected
+        # frozen-model execution mode for every Phase 5 validation pass, then
+        # restore training flags without changing weights or optimizer state.
+        flags = tuple(p.requires_grad for p in model.parameters())
+        model.requires_grad_(False)
+        try:
+            return predict(model, dataset, config.training, **kwargs)
+        finally:
+            for parameter, flag in zip(model.parameters(), flags):
+                parameter.requires_grad_(flag)
     try:
-        data = prepare_inputs(config)
+        data = (data_factory or prepare_inputs)(config)
         torch.set_num_threads(config.cpu_threads)
         seed_everything(config.training)
         device = resolve_device(config.training)
-        model = LateFusionMLP(config.model).to(device)
+        model = build_model(config.model).to(device)
         optimizer = build_optimizer(model, config.training.optimizer)
-        run_config = {"schema": SCHEMA, "model": asdict(config.model), "training": asdict(config.training),
+        run_config = {"schema": schema, "model": asdict(config.model), "training": asdict(config.training),
                       "parameter_count": sum(p.numel() for p in model.parameters()),
                       "initial_weights": "deterministic random initialization; no pretrained fused weights",
                       "pair_seed": config.pair_seed, "patience": config.patience, "cpu_threads": config.cpu_threads,
@@ -362,12 +405,15 @@ def run_experiment(config: MLPExperimentConfig, *, tracker_factory=ForgeMLPTrack
                       "software_versions": {"python": platform.python_version(), "numpy": np.__version__,
                                             "torch": str(torch.__version__), "cuda_runtime": torch.version.cuda},
                       "device": str(device), "wandb_group": config.tracking_group, "wandb_name": config.run_name,
-                      "challenge_evaluation": "after within-run freeze" if config.evaluate_challenge else "deferred until study selection",
+                      "challenge_evaluation": ("after within-run freeze" if config.evaluate_challenge else
+                                               "reserved for later frozen-model diagnostics" if freeze_run is not None
+                                               else "deferred until study selection"),
                       "configuration_fingerprint": _fingerprint({"model": asdict(config.model),
                           "training": asdict(config.training), "patience": config.patience,
                           "cpu_threads": config.cpu_threads, "pair_seed": config.pair_seed,
                           "code_sha256": code_sha256, "data": data.summary})}
         _write(output, "config.json", run_config)
+        protocol_guard = freeze_run(config, run_config) if freeze_run is not None else lambda: None
         _write(output, "input_verification.json", {"inputs": _portable(data.before), "data": data.summary})
         _source_archive(output, source_paths)
         state["stage"] = "FORGE_ONLINE_WRITE_PREFLIGHT"
@@ -379,16 +425,18 @@ def run_experiment(config: MLPExperimentConfig, *, tracker_factory=ForgeMLPTrack
         # Guard sources again immediately before optimization, after network waits.
         if _inventory(data.paths) != data.before or _inventory(source_paths) != source_before:
             raise ContractError("input files or source code changed before optimization")
+        protocol_guard()
         loader = make_loader(data.train, config.training, role="train")
         selection = EarlyStopping(config.patience)
         overlap = validate_split_isolation(data.train, data.validation)
         for epoch in range(1, config.training.epochs + 1):
+            protocol_guard()
             state.update(stage="OPTIMIZING", optimization_started=True)
             _write(output, "state.json", state)
             started = time.perf_counter()
             training = train_epoch(model, loader, optimizer, config.training)
             state["stage"] = "VALIDATING_PRIMARY"
-            validation_predictions = predict(model, data.validation, config.training)
+            validation_predictions = evaluate(model, data.validation)
             validation = primary_metrics(validation_predictions, threshold=.5)
             improved = selection.observe(epoch, validation["roc_auc"])
             steps = state["optimizer_steps_recorded"] + training["optimizer_steps"]
@@ -400,6 +448,10 @@ def run_experiment(config: MLPExperimentConfig, *, tracker_factory=ForgeMLPTrack
                    "gradient_norm_max": training["gradient_norm_max"],
                    "duration_seconds": time.perf_counter()-started,
                    "optimizer_steps": steps, "selected": improved, "stale_epochs": selection.stale_epochs}
+            if freeze_run is not None:
+                row.update(train_count=training["count"], expected_train_count=len(data.train),
+                           distinct_index_coverage_verified=True, val_count=len(data.validation),
+                           best_epoch=selection.best_epoch)
             history.append(row)
             _write(output, "history.json", history)
             if improved:
@@ -411,7 +463,9 @@ def run_experiment(config: MLPExperimentConfig, *, tracker_factory=ForgeMLPTrack
                                        ("torch", str(torch.__version__))), source_overlap=overlap,
                     epoch=epoch, optimizer_steps=steps, optimizer_state_present=True, selected_epoch=epoch,
                     validation_metrics=tuple((key, float(validation[key])) for key in
-                                             ("loss", "roc_auc", "average_precision", "accuracy", "f1")))
+                                             ("loss", "roc_auc", "average_precision", "accuracy", "f1")),
+                    schema=("gc2-fusion-checkpoint-v1" if type(config.model) is MLPConfig
+                            else "gc2-fusion-cross-attention-checkpoint-v1"))
                 save_checkpoint(output, model, optimizer, selected_metadata)
                 # Compare to the exact in-memory selected evaluation logits,
                 # avoiding any CPU/CUDA kernel difference in this identity check.
@@ -426,12 +480,13 @@ def run_experiment(config: MLPExperimentConfig, *, tracker_factory=ForgeMLPTrack
                      f"selected={improved}, elapsed={row['duration_seconds']:.1f}s")
             if selection.should_stop:
                 break
+        protocol_guard()
         state["stage"] = "RESTORING_AND_FREEZING_SELECTED_MODEL"
         _write(output, "state.json", state)
         selected, restored_metadata = load_selected_checkpoint(output, expected_metadata=selected_metadata)
         selected = selected.to(device).eval()
         selected.requires_grad_(False)
-        validation_predictions = predict(selected, data.validation, config.training)
+        validation_predictions = evaluate(selected, data.validation)
         reference = _read(output / "selected_validation_reference.json")
         expected_logits = np.array(reference["logits"], dtype=validation_predictions.logits.dtype)
         if (not np.array_equal(expected_logits, validation_predictions.logits)
@@ -452,16 +507,17 @@ def run_experiment(config: MLPExperimentConfig, *, tracker_factory=ForgeMLPTrack
                "stop_reason": "patience_exhausted" if selection.should_stop else "maximum_epochs",
                "challenge_used_for_selection": False, "threshold_fit_count": 1,
                "validation_reuse": REUSE_NOTICE})
-        state["stage"] = "FROZEN_TRAIN_VALIDATION_AND_CHALLENGE_REPORTS"
+        state["stage"] = ("FROZEN_TRAIN_VALIDATION_REPORTS" if freeze_run is not None
+                          else "FROZEN_TRAIN_VALIDATION_AND_CHALLENGE_REPORTS")
         _write(output, "state.json", state)
-        train_predictions = predict(selected, data.train, config.training)
+        train_predictions = evaluate(selected, data.train)
         train_report = evaluate_frozen(train_predictions, policy)
         val_report = evaluate_frozen(validation_predictions, policy)
         challenge_predictions = challenge_report = None
         if config.evaluate_challenge:
-            challenge_predictions = predict(selected, data.challenge, config.training, frozen_policy=policy)
+            challenge_predictions = evaluate(selected, data.challenge, frozen_policy=policy)
             challenge_report = evaluate_frozen(challenge_predictions, policy)
-        comparison = _comparison(train_report, val_report, challenge_report, data.baseline)
+        comparison = (comparison_factory or _comparison)(train_report, val_report, challenge_report, data.baseline)
         final = {"selected_epoch": selection.best_epoch, "epochs_executed": len(history),
                  "train_primary": train_report, "val_primary": val_report,
                  "model_sha256": policy.model_sha256, "frozen_threshold": policy.threshold,
@@ -484,9 +540,9 @@ def run_experiment(config: MLPExperimentConfig, *, tracker_factory=ForgeMLPTrack
         _write(output, "post_verification.json", {"original_input_hashes_unchanged": True,
                                                 "source_code_unchanged": True, "final_test_scored": False})
         names = sorted(p.name for p in output.iterdir() if p.is_file() and p.name not in ("state.json", "tracking.json"))
-        manifest = {"schema": SCHEMA, "files": _portable(_inventory({n: output/n for n in names}))}
+        manifest = {"schema": schema, "files": _portable(_inventory({n: output/n for n in names}))}
         _write(output, "output_manifest.json", manifest)
-        _verify_output_manifest(output)
+        _verify_output_manifest(output, schema=schema)
         manifest_sha = _file_entry("output_manifest.json", output / "output_manifest.json")["sha256"]
         scalars = {"final/selected_epoch": selection.best_epoch, "final/epochs_executed": len(history),
                    "final/frozen_threshold": policy.threshold,
@@ -499,12 +555,19 @@ def run_experiment(config: MLPExperimentConfig, *, tracker_factory=ForgeMLPTrack
         if config.evaluate_challenge:
             scalars.update({"final/val_challenge_rejection": challenge_report["rejection_rate"],
                             "final/val_challenge_false_acceptance": challenge_report["false_acceptance_rate"]})
+        if freeze_run is not None:
+            scalars.update({"final/stop_reason": "patience_exhausted" if selection.should_stop else "maximum_epochs",
+                            "final/best_validation_roc_auc": selection.best_auc,
+                            "final/train_examples_per_epoch": len(data.train), "final/val_examples": len(data.validation),
+                            "final/challenge_evaluated": False,
+                            "final/preregistration_sha256": _file_entry("plan", output / "preregistration.json")["sha256"]})
         state["stage"] = "UPLOADING_AND_VERIFYING_FORGE_EVIDENCE"
         _write(output, "state.json", state)
         def verify_before_finalize():
+            protocol_guard()
             if _inventory(data.paths) != data.before or _inventory(source_paths) != source_before:
                 raise ContractError("inputs or source code changed during final artifact upload")
-            _verify_output_manifest(output)
+            _verify_output_manifest(output, schema=schema)
             if _file_entry("output_manifest.json", output / "output_manifest.json")["sha256"] != manifest_sha:
                 raise ContractError("output manifest changed during final artifact upload")
 

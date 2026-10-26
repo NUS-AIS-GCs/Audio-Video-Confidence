@@ -79,38 +79,36 @@ def create_app():
     ui = DeploymentUI(config, readiness)
     LOGGER.info("startup_status=%s missing_categories=%s", readiness.status, ",".join(categories))
 
+    from .live.service import LiveCaptureService
+    from .ui.live_section import build_live_section
+    from .ui.theme import ABOUT_MD, BRAND_CSS, header_html
+    from .ui.upload_section import build_upload_section
+
+    model_ready = readiness.inference_enabled
     with gr.Blocks(
-        title="AValidate deployment readiness",
+        title="AValidate",
         analytics_enabled=False,
     ) as demo:
-        gr.Markdown(
-            "# AValidate — deployment readiness\n\n"
-            "**MODEL_NOT_READY. Real inference is disabled.** This interface does not show example, "
-            "annotation-derived, or synthetic predictions. A successful upload check is not an "
-            "audio-video verification result."
-        )
-        gr.Markdown("### Startup status\n\n" + "\n".join(f"- `{item}`" for item in categories))
-        uploaded = gr.File(
-            label="One 10-second audio-video file (MP4, MOV, MKV, or WebM)",
-            file_count="single",
-            file_types=[".mp4", ".mov", ".mkv", ".webm"],
-            type="filepath",
-        )
-        submit = gr.Button("Validate upload (inference disabled)", variant="secondary")
-        output = gr.JSON(label="Admission status; predictions are disabled")
-        submit.click(
-            fn=ui.submit,
-            inputs=uploaded,
-            outputs=output,
-            api_name=None,
-            api_visibility="private",
-            concurrency_limit=1,
-        )
-        gr.Markdown(
-            "A future inference path must use the verified Phase 6 contracts after exact encoder "
-            "artifacts, decoder behavior, and raw-to-TRAIN export parity are independently verified. "
-            "Scores, if later enabled, remain uncalibrated; no per-second output is inferred from attention."
-        )
+        gr.HTML(header_html(model_ready), head=f"<style>{BRAND_CSS}</style>")
+        if not model_ready:
+            gr.Markdown(
+                "**MODEL_NOT_READY. Real inference is disabled.** This interface does not show example, "
+                "annotation-derived, or synthetic predictions. A successful upload check is not an "
+                "audio-video verification result. Live capture shows buffer and sync diagnostics only; "
+                "predictions are disabled.")
+            with gr.Accordion(f"Startup status: {len(categories)} items not ready", open=False):
+                gr.Markdown("\n".join(f"- `{item}`" for item in categories))
+        with gr.Tabs():
+            with gr.Tab("Upload verification"):
+                build_upload_section(gr, ui)
+            with gr.Tab("Live verification"):
+                build_live_section(gr, LiveCaptureService())
+            with gr.Tab("About"):
+                gr.Markdown(ABOUT_MD)
+                gr.Markdown(
+                    "A future inference path must use the verified Phase 6 contracts after exact encoder "
+                    "artifacts, decoder behavior, and raw-to-TRAIN export parity are independently verified. "
+                    "Scores, if later enabled, remain uncalibrated; no per-second output is inferred from attention.")
     demo.queue(default_concurrency_limit=1, max_size=8)
     return demo, config
 

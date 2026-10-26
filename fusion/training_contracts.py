@@ -15,7 +15,9 @@ from torch.utils.data import DataLoader
 
 from .contracts import ContractError
 from .embedding_data import EmbeddingDataset, EmbeddingProvenance
+from .cross_attention_model import CrossAttentionConfig, UnidirectionalAttentionConfig
 from .mlp_model import MLPConfig
+from .model_interface import model_config_from_dict
 from .pair_contracts import PairType
 
 FORGE_BASE_URL = "https://api.forge.coreweave.com"
@@ -263,7 +265,7 @@ class CheckpointMetadata:
     optimizer_state_present describes the companion checkpoint, not state stored
     in this JSON. Epoch zero / no selected epoch is a valid pre-training schema.
     """
-    model: MLPConfig
+    model: MLPConfig | CrossAttentionConfig | UnidirectionalAttentionConfig
     training: TrainingConfig
     git_commit: str
     code_sha256: str
@@ -279,12 +281,15 @@ class CheckpointMetadata:
     schema: str = "gc2-fusion-checkpoint-v1"
 
     def __post_init__(self):
-        if type(self.model) is not MLPConfig or type(self.training) is not TrainingConfig:
+        if (type(self.model) not in (MLPConfig, CrossAttentionConfig, UnidirectionalAttentionConfig)
+                or type(self.training) is not TrainingConfig):
             raise ContractError("checkpoint requires strict model and training configs")
         self.model.__post_init__()
         self.training.__post_init__()
-        if self.schema != "gc2-fusion-checkpoint-v1":
-            raise ContractError("unknown checkpoint schema")
+        expected_schema = ("gc2-fusion-checkpoint-v1" if type(self.model) is MLPConfig
+                           else "gc2-fusion-cross-attention-checkpoint-v1")
+        if self.schema != expected_schema:
+            raise ContractError("checkpoint schema must match the architecture")
         if not isinstance(self.git_commit, str) or re.fullmatch(r"[0-9a-f]{40}", self.git_commit) is None:
             raise ContractError("git_commit must be a full 40-character revision")
         _digest(self.code_sha256, "code_sha256")
@@ -375,8 +380,7 @@ class CheckpointMetadata:
                 raise ContractError("checkpoint metadata must be an object")
             fields = dict(value)
             fingerprint = fields.pop("experiment_fingerprint")
-            model = dict(fields.pop("model"))
-            model["hidden_dims"] = tuple(model["hidden_dims"])
+            model = model_config_from_dict(fields.pop("model"), fields["schema"])
             training = dict(fields.pop("training"))
             optimizer = dict(training.pop("optimizer"))
             optimizer["betas"] = tuple(optimizer["betas"])
@@ -391,7 +395,7 @@ class CheckpointMetadata:
             if not isinstance(fields["source_overlap"], (tuple, list)):
                 raise ContractError("source overlap must be a sequence")
             fields["source_overlap"] = tuple(fields["source_overlap"])
-            result = cls(model=MLPConfig(**model),
+            result = cls(model=model,
                          training=TrainingConfig(optimizer=OptimizerConfig(**optimizer), **training),
                          data=tuple(data), **fields)
             if result.experiment_fingerprint != fingerprint:

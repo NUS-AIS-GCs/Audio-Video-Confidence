@@ -34,6 +34,11 @@ def _quiet_sdk():
 
 
 class ForgeMLPTracker:
+    group = GROUP
+    allowed_groups = (GROUP, STUDY_GROUP)
+    artifact_prefix = "phase4-mlp"
+    run_prefix = "phase4-mlp"
+
     def __init__(self, output):
         self.output = Path(output)
         self.sdk = self.api = self.run = None
@@ -41,7 +46,7 @@ class ForgeMLPTracker:
         self._abort_attempted = False
         self._success_finalization_attempted = False
         self.metadata = {"status": "NOT_STARTED", "base_url": FORGE_BASE_URL,
-                         "entity": FORGE_ENTITY, "project": FORGE_PROJECT, "group": GROUP}
+                         "entity": FORGE_ENTITY, "project": FORGE_PROJECT, "group": self.group}
 
     def preflight_access(self):
         """Read-only authentication/project access check; creates no run."""
@@ -75,9 +80,9 @@ class ForgeMLPTracker:
             raise TrackingUnavailable(safe_failure("Forge authenticated access", exc)) from None
 
     def start(self, config):
-        group = config.get("wandb_group", GROUP)
-        name = config.get("wandb_name") or f"phase4-mlp-seed{config['training']['seed']}-initial"
-        if group not in (GROUP, STUDY_GROUP) or not isinstance(name, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", name) is None:
+        group = config.get("wandb_group", self.group)
+        name = config.get("wandb_name") or f"{self.run_prefix}-seed{config['training']['seed']}-initial"
+        if group not in self.allowed_groups or not isinstance(name, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", name) is None:
             raise TrackingUnavailable("invalid prespecified Forge group or run name")
         self.preflight_access()
         try:
@@ -105,7 +110,7 @@ class ForgeMLPTracker:
                 self.run.log({"tracking/ready": 1}, step=0)
                 probe_path = self.output / "tracking_probe.json"
                 probe_path.write_text(_json({"schema": "gc2-forge-write-probe-v1", "ready": True}), encoding="utf-8")
-                probe = self.sdk.Artifact("phase4-mlp-online-readiness", type="verification")
+                probe = self.sdk.Artifact(f"{self.artifact_prefix}-online-readiness", type="verification")
                 probe.add_file(probe_path, name=probe_path.name)
                 uploaded = self.run.log_artifact(probe)
                 uploaded.wait(timeout=180)
@@ -144,9 +149,9 @@ class ForgeMLPTracker:
                 self.run.summary["reproducibility_manifest_sha256"] = manifest_sha256
                 uploaded_metadata = []
                 for name, kind, chosen in (
-                    ("phase4-mlp-selected-checkpoint", "model", [p for p in files if p.name in
+                    (f"{self.artifact_prefix}-selected-checkpoint", "model", [p for p in files if p.name in
                         ("best.pt", "checkpoint_metadata.json", "frozen_operating_point.json")]),
-                    ("phase4-mlp-reproducibility-reports", "evaluation", [p for p in files if p.name != "best.pt"]),
+                    (f"{self.artifact_prefix}-reproducibility-reports", "evaluation", [p for p in files if p.name != "best.pt"]),
                 ):
                     artifact = self.sdk.Artifact(name, type=kind,
                                                 metadata={"reproducibility_manifest_sha256": manifest_sha256})

@@ -21,6 +21,13 @@ from .mlp_model import LateFusionMLP, MLPConfig
 
 def run_smoke(audio_root, vision_root, official_root, integration_root, *, limit=8,
               expected_counts=OFFICIAL_COUNTS):
+    return _run_smoke(audio_root, vision_root, official_root, integration_root,
+                      limit=limit, expected_counts=expected_counts,
+                      model_factory=lambda: LateFusionMLP(MLPConfig()))
+
+
+def _run_smoke(audio_root, vision_root, official_root, integration_root, *, limit,
+               expected_counts, model_factory, inspect_attention=False):
     """Check complete original evidence before reading only the TRAIN manifest.
 
     All-split arrays/metadata and opaque manifest hashes are integrity context
@@ -89,9 +96,10 @@ def run_smoke(audio_root, vision_root, official_root, integration_root, *, limit
                 mismatches += int(not np.array_equal(batch[key][row].numpy(), original.embeddings[source.row_index]))
         if mismatches:
             raise ContractError("smoke extraction changed original row references or values")
-        model = LateFusionMLP(MLPConfig()).eval()
+        model = model_factory().eval()
         with torch.inference_mode():
-            output = model(**batch, return_probabilities=True)
+            options = {"return_attention_weights": True} if inspect_attention else {}
+            output = model(**batch, return_probabilities=True, **options)
         result = {"schema": "gc2-fusion-untrained-smoke-v1", "split": "train",
                   "trained": False, "metrics_computed": False, "wandb_run_created": False,
                   "full_context_structural_validation_only": True,
@@ -114,6 +122,22 @@ def run_smoke(audio_root, vision_root, official_root, integration_root, *, limit
                       for b in (audio, vision)},
                   "torch_version": torch.__version__, "numpy_version": np.__version__,
                   "cuda_available": torch.cuda.is_available()}
+        if inspect_attention:
+            result["schema"] = "gc2-fusion-cross-attention-untrained-smoke-v1"
+            result["architecture"] = model.config.architecture
+            result["validity_shape"] = list(batch["validity"].shape)
+            result["valid_bins_per_pair"] = batch["validity"].sum(dim=1).tolist()
+            for name in ("audio_to_video_attention", "video_to_audio_attention"):
+                weights = getattr(output, name)
+                mask = batch["validity"]
+                if (tuple(weights.shape) != (len(chosen), model.config.num_heads, 10, 10)
+                        or not torch.isfinite(weights).all()
+                        or not torch.allclose(weights.sum(-1), mask[:, None, :].to(weights).expand_as(weights.sum(-1)))
+                        or weights.masked_select(~mask[:, None, :, None].expand_as(weights)).any()
+                        or weights.masked_select(~mask[:, None, None, :].expand_as(weights)).any()):
+                    raise ContractError("invalid smoke attention diagnostics")
+                result[name + "_shape"] = list(weights.shape)
+            result["finite_attention_and_correct_masks"] = True
     if before != _inventory(paths):
         raise ContractError("producer artifacts, evidence or manifests changed during smoke check")
     result["producer_inputs_and_manifests_unchanged"] = True

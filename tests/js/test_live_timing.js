@@ -13,6 +13,13 @@ test("clock maps camera time onto the audio timeline", () => {
   assert.ok(Math.abs(c.perfToTimeline(10500) - 0.5) < 1e-9);
   assert.strictEqual(c.frameToSample(32000 + 1600), 1600);
   assert.throws(() => T.makeClock({ contextTime: NaN, performanceTime: 0 }, 0, 16000));
+  // an audio clock that has not started reports performanceTime 0: not a usable anchor
+  assert.throws(() => T.makeClock({ contextTime: 0, performanceTime: 0 }, 0, 16000), /INVALID_CLOCK_ANCHOR/);
+  assert.throws(() => T.makeClock(undefined, 0, 16000), /INVALID_CLOCK_ANCHOR/);
+});
+
+test("a missing audio clock has a readable message", () => {
+  assert.match(T.permissionMessage({ name: "NO_AUDIO_CLOCK" }), /audio clock/);
 });
 
 test("frame picker keeps the frame closest to each second and emits in order", () => {

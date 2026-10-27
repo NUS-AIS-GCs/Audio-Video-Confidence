@@ -4,6 +4,7 @@
 // (deployment/live). It shows readiness and sync diagnostics only: it never shows a prediction.
 (function () {
   const PUSH_INTERVAL_MS = 250;
+  const CLOCK_TRIES = 40;   // audio blocks tolerated while the browser audio clock starts, before giving up
   const MAX_FRAME_SIDE = 640;
   const JPEG_QUALITY = 0.9;
   const $ = function (sel) { return element.querySelector(sel); };
@@ -83,7 +84,7 @@
     const c = { stream: null, ctx: null, node: null, session: null, timer: null, rvfc: null, raf: null,
                 pushing: false, stopped: false, clock: null, audio: AVTiming.makeAudioAccumulator(),
                 picker: AVTiming.makeFramePicker(), canvases: new Map(), frames: [], pendingAudio: [],
-                client: {}, fpsCount: 0, fpsSince: performance.now() };
+                client: {}, clockTries: 0, fpsCount: 0, fpsSince: performance.now() };
     cap = c;
     try {
       c.stream = await navigator.mediaDevices.getUserMedia({
@@ -121,7 +122,11 @@
       c.node.port.onmessage = function (ev) {
         const m = ev.data;
         if (!c.clock) {   // the first audio sample defines the timeline origin
-          c.clock = AVTiming.makeClock(c.ctx.getOutputTimestamp(), m.frame, c.ctx.sampleRate);
+          try { c.clock = AVTiming.makeClock(c.ctx.getOutputTimestamp(), m.frame, c.ctx.sampleRate); }
+          catch (e) {   // clock not running yet (or not supported): drop this block and retry, then give up
+            if (++c.clockTries > CLOCK_TRIES) stop(AVTiming.permissionMessage({ name: "NO_AUDIO_CLOCK" }), "error");
+            return;
+          }
           setState("Capturing: filling the 10-second buffer…", "busy");
           watchFrames();
         }

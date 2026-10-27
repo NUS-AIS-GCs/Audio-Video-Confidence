@@ -9,7 +9,8 @@ const AVTiming = (function () {
 
   // anchor: {contextTime (s), performanceTime (ms)} from AudioContext.getOutputTimestamp()
   function makeClock(anchor, originFrame, sampleRate) {
-    if (!anchor || !Number.isFinite(anchor.contextTime) || !Number.isFinite(anchor.performanceTime)) {
+    // a zero performanceTime means the browser has not started the audio clock yet
+    if (!anchor || !Number.isFinite(anchor.contextTime) || !Number.isFinite(anchor.performanceTime) || anchor.performanceTime <= 0) {
       throw new Error("INVALID_CLOCK_ANCHOR");
     }
     const originCtx = originFrame / sampleRate;
@@ -113,6 +114,8 @@ const AVTiming = (function () {
       case "NotReadableError":
       case "AbortError":
         return "The camera or microphone is in use by another application. Close it and press Start again.";
+      case "NO_AUDIO_CLOCK":
+        return "This browser does not provide the audio clock needed to align audio and video. Use a current version of Chrome or Edge.";
       case "INSECURE_CONTEXT":
         return "Live capture needs a secure page (https or localhost).";
       case "NO_AUDIO_TRACK":

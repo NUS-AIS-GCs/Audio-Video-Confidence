@@ -236,6 +236,8 @@
     }
     ui.video.srcObject = null;
     ui.meter.style.width = "0%";
+    // The server discards the buffer on stop, so the display must not keep showing it as ready.
+    renderGrid(null); ui.diag.innerHTML = ""; ui.contract.textContent = "";
     ui.start.disabled = false; ui.stop.disabled = true; ui.check.disabled = true;
     setState(message && kind === "error" ? "Stopped" : "Idle", message && kind === "error" ? "error" : "idle");
     setMessage(message || "", kind);

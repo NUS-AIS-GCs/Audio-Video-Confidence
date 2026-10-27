@@ -17,3 +17,11 @@ The app requires `AVAL_ACCESS_MODE=gradio_auth` and non-empty `AVAL_GRADIO_USERN
 the app authentication protects its UI and direct event/API requests.
 
 The research Streamlit application remains `app.py` and is not the Docker entry point.
+
+## Frontend and live capture
+
+The Gradio app has a branded layout with Upload verification, Live verification and About tabs.
+The Live tab records from a webcam and microphone into a rolling ten-second buffer and shows buffer
+readiness and sync diagnostics only; predictions stay disabled. See
+[docs/phase8_frontend_live.md](docs/phase8_frontend_live.md) for usage, architecture, tests and
+integration notes.

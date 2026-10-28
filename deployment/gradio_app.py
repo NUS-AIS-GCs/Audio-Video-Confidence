@@ -84,6 +84,7 @@ def create_app():
     from .ui.theme import ABOUT_MD, BRAND_CSS, header_html
     from .ui.upload_section import build_upload_section
 
+    live_service = LiveCaptureService()
     model_ready = readiness.inference_enabled
     with gr.Blocks(
         title="AValidate",
@@ -102,7 +103,7 @@ def create_app():
             with gr.Tab("Upload verification"):
                 build_upload_section(gr, ui)
             with gr.Tab("Live verification"):
-                build_live_section(gr, LiveCaptureService())
+                build_live_section(gr, live_service)
             with gr.Tab("About"):
                 gr.Markdown(ABOUT_MD)
                 gr.Markdown(
@@ -110,6 +111,7 @@ def create_app():
                     "artifacts, decoder behavior, and raw-to-TRAIN export parity are independently verified. "
                     "Scores, if later enabled, remain uncalibrated; no per-second output is inferred from attention.")
     demo.queue(default_concurrency_limit=1, max_size=8)
+    demo.aval_live_service = live_service
     return demo, config
 
 
@@ -123,6 +125,7 @@ def main() -> None:
     except ValueError:
         raise RuntimeError("INVALID_SERVER_PORT") from None
     blocked = [str(config.model_root)]
+    from .live.security import live_app_kwargs
     demo.launch(
         server_name="0.0.0.0",
         server_port=port,
@@ -132,6 +135,7 @@ def main() -> None:
         enable_monitoring=False,
         max_file_size=config.max_upload_bytes,
         blocked_paths=blocked,
+        app_kwargs=live_app_kwargs(demo.aval_live_service),
     )
 
 

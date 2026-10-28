@@ -1,24 +1,25 @@
 """Live capture sessions behind the authenticated Gradio app.
 
-The browser calls three functions (wired in deployment/ui/live_section.py):
-  live_start({"sample_rate": 48000})                     -> {"session": token, "limits": {...}}
-  live_push({"session": token, "audio": [...], "frames": [...], "client": {...}}) -> diagnostics
-  live_stop({"session": token})                          -> {"stopped": true}
+The browser calls functions wired in deployment/ui/live_section.py:
+  live_start({"sample_rate": 48000}) -> {"session": token, "tab_key": capability, "limits": {...}}
+  live_push({"session": token, "tab_key": capability, "audio": [...], "frames": [...]}) -> diagnostics
+  live_stop({"session": token, "tab_key": capability}) -> {"status": "STOPPED"}
 plus live_check, which validates the current window against the backend RawMediaInput contract.
 
-Every session belongs to one Gradio browser session (its session hash), is capped in number, size and
-idle time, and is freed on stop or timeout. Errors are stable codes; media bytes are never logged.
+Every session binds a server-authenticated login and a separate server-minted tab capability.
+Registry operations are serialized, pushes commit atomically, and an expiry worker clears idle media.
 No model runs here and no prediction is produced.
 """
 from __future__ import annotations
 
 import base64
 import binascii
+import copy
 import logging
 import secrets
 import time
 from dataclasses import dataclass, field
-from threading import Lock
+from threading import Event, RLock, Thread, current_thread
 
 import numpy as np
 
@@ -49,9 +50,9 @@ CAPTURE_PROFILE = {
 
 @dataclass
 class _Session:
-    owner: str
-    buffer: LiveBuffer
-    lock: Lock = field(default_factory=Lock)
+    owner: str = field(repr=False)
+    tab_key: str = field(repr=False)
+    buffer: LiveBuffer = field(repr=False)
     last_seen: float = field(default_factory=time.monotonic)
     client: dict = field(default_factory=dict)
 
@@ -132,27 +133,54 @@ def decode_frame(text) -> np.ndarray:
 class LiveCaptureService:
     def __init__(self, max_sessions: int = MAX_SESSIONS, idle_timeout_s: float = IDLE_TIMEOUT_S,
                  clock=time.monotonic):
+        if not 1 <= max_sessions <= MAX_SESSIONS or not 0 < idle_timeout_s <= IDLE_TIMEOUT_S:
+            raise ValueError("live limits cannot exceed deployment limits")
         self.max_sessions = max_sessions
         self.idle_timeout_s = idle_timeout_s
         self.clock = clock
         self._sessions: dict[str, _Session] = {}
-        self._lock = Lock()
+        self._lock = RLock()
+        self._shutdown = Event()
+        self._worker = None
+        self._closed = False
+
+    def _reap(self):
+        while not self._shutdown.wait(min(1.0, self.idle_timeout_s / 2)):
+            with self._lock:
+                self._expire()
+                if not self._sessions:
+                    self._worker = None
+                    return
+
+    def close(self):
+        """Stop the worker and release media at application shutdown (also used by tests)."""
+        with self._lock:
+            self._closed = True
+            self._shutdown.set()
+            for session in self._sessions.values():
+                session.buffer.clear()
+            self._sessions.clear()
+            worker = self._worker
+        if worker is not None and worker is not current_thread():
+            worker.join(timeout=2)
 
     # ---- session registry ---------------------------------------------------------------------
     def _expire(self) -> None:
         now = self.clock()
-        for token in [t for t, s in self._sessions.items() if now - s.last_seen > self.idle_timeout_s]:
+        for token in [t for t, s in self._sessions.items() if now - s.last_seen >= self.idle_timeout_s]:
             self._sessions.pop(token).buffer.clear()
             LOGGER.info("live_session_expired")
 
     def _get(self, owner: str, payload) -> _Session:
         token = payload.get("session") if isinstance(payload, dict) else None
-        with self._lock:
-            self._expire()
-            session = self._sessions.get(token) if isinstance(token, str) else None
-        if session is None or not secrets.compare_digest(session.owner, owner):
+        self._expire()
+        session = self._sessions.get(token) if isinstance(token, str) and len(token) <= 128 else None
+        tab_key = payload.get("tab_key") if isinstance(payload, dict) else None
+        if (self._closed or session is None or not isinstance(owner, str) or not owner
+                or not isinstance(tab_key, str) or len(tab_key) > 128 or not tab_key.isascii()
+                or not secrets.compare_digest(session.owner.encode(), owner.encode())
+                or not secrets.compare_digest(session.tab_key.encode(), tab_key.encode())):
             raise LiveBufferError("LIVE_SESSION_NOT_FOUND")
-        session.last_seen = self.clock()
         return session
 
     @property
@@ -164,20 +192,33 @@ class LiveCaptureService:
     # ---- browser-facing calls (each returns a JSON-safe dict, never raises) --------------------
     def start(self, owner: str, payload) -> dict:
         try:
+            if not isinstance(owner, str) or not owner:
+                raise LiveBufferError("LIVE_AUTHENTICATION_REQUIRED")
             sr = payload.get("sample_rate") if isinstance(payload, dict) else None
             if type(sr) is not int:
                 raise LiveBufferError("UNSUPPORTED_SAMPLE_RATE")
             buffer = LiveBuffer(sample_rate=sr)
             with self._lock:
                 self._expire()
-                for t in [t for t, s in self._sessions.items() if s.owner == owner]:
-                    self._sessions.pop(t).buffer.clear()          # one live session per browser tab
+                if self._closed:
+                    raise LiveBufferError("LIVE_UNAVAILABLE")
+                # Starting another tab never replaces another capture, even for the same account.
+                # An explicit restart must prove possession of the old tab capability first.
+                if isinstance(payload, dict) and ("session" in payload or "tab_key" in payload):
+                    old = self._get(owner, payload)
+                    self._sessions.pop(payload["session"])
+                    old.buffer.clear()
                 if len(self._sessions) >= self.max_sessions:
                     raise LiveBufferError("LIVE_CAPACITY_REACHED")
                 token = secrets.token_urlsafe(16)
-                self._sessions[token] = _Session(owner=owner, buffer=buffer, last_seen=self.clock())
+                tab_key = secrets.token_urlsafe(32)
+                self._sessions[token] = _Session(owner=owner, tab_key=tab_key,
+                                                buffer=buffer, last_seen=self.clock())
+                if self._worker is None:
+                    self._worker = Thread(target=self._reap, name="aval-live-expiry", daemon=True)
+                    self._worker.start()
             LOGGER.info("live_session_started sample_rate=%d", sr)
-            return {"status": "STARTED", "session": token,
+            return {"status": "STARTED", "session": token, "tab_key": tab_key,
                     "limits": {"max_frames_per_push": MAX_FRAMES_PER_PUSH,
                                "max_audio_seconds_per_push": MAX_AUDIO_SECONDS_PER_PUSH,
                                "idle_timeout_s": self.idle_timeout_s}}
@@ -185,6 +226,13 @@ class LiveCaptureService:
             return {"status": "REJECTED", "error_code": exc.code}
 
     def push(self, owner: str, payload) -> dict:
+        # The same registry lock covers authentication, decoding, commit, stop and expiry.
+        # HTTP transport admits at most four in-flight operations. No stopped session can
+        # later be mutated or resurrected by a delayed worker.
+        with self._lock:
+            return self._push(owner, payload)
+
+    def _push(self, owner: str, payload) -> dict:
         try:
             session = self._get(owner, payload)
             audio, frames = payload.get("audio", []), payload.get("frames", [])
@@ -209,17 +257,23 @@ class LiveCaptureService:
             if sum(len(x) for _, x in chunks) > max_samples:
                 raise LiveBufferError("PUSH_TOO_LARGE")
             decoded = [(f.get("t"), decode_frame(i)) for f, i in zip(frames, images)]
-            with session.lock:
-                for start, x in chunks:
-                    session.buffer.add_audio(start, x)
-                for t, rgb in decoded:
-                    session.buffer.add_frame(t, rgb)
-                client = payload.get("client")
-                if isinstance(client, dict):
-                    session.client = _client_report(client)
-                return {"status": "CAPTURING", **session.buffer.diagnostics(), "client": session.client}
+            # A bounded copy is a transaction: even a late timestamp failure leaves
+            # the existing buffer, counters, client diagnostics and idle deadline unchanged.
+            candidate = copy.deepcopy(session.buffer)
+            for start, x in chunks:
+                candidate.add_audio(start, x)
+            for t, rgb in decoded:
+                candidate.add_frame(t, rgb)
+            client = payload.get("client")
+            report = _client_report(client) if isinstance(client, dict) else session.client
+            result = {"status": "CAPTURING", **candidate.diagnostics(), "client": report}
+            session.buffer, session.client = candidate, report
+            session.last_seen = self.clock()
+            return result
         except LiveBufferError as exc:
             return {"status": "REJECTED", "error_code": exc.code}
+        except Exception:
+            return {"status": "REJECTED", "error_code": "LIVE_PUSH_FAILED"}
 
     def check(self, owner: str, payload) -> dict:
         """Validate the current window against the backend RawMediaInput contract. No inference.
@@ -227,11 +281,15 @@ class LiveCaptureService:
         CONTRACT_VALID means only that the shapes, dtypes and validity masks fit the contract. The achieved
         frame times are reported separately: the contract's timestamps 0..9 are bin labels, not proof
         that each frame was captured exactly on its second."""
+        with self._lock:
+            return self._check(owner, payload)
+
+    def _check(self, owner: str, payload) -> dict:
         try:
             session = self._get(owner, payload)
-            with session.lock:
-                snap = session.buffer.snapshot()
-                media = session.buffer.to_raw_media_input(snap)
+            snap = session.buffer.snapshot()
+            media = session.buffer.to_raw_media_input(snap)
+            session.last_seen = self.clock()
             return {"status": "CONTRACT_VALID", "contract": "fusion.inference_contracts.RawMediaInput",
                     "waveform_shape": list(media.waveform.shape), "frames_shape": list(media.frames.shape),
                     "timing": snap["timing"], "capture": CAPTURE_PROFILE,
@@ -243,13 +301,14 @@ class LiveCaptureService:
             return {"status": "CONTRACT_REJECTED", "error_code": "RAW_MEDIA_CONTRACT_REJECTED", "predictions": None}
 
     def stop(self, owner: str, payload) -> dict:
-        token = payload.get("session") if isinstance(payload, dict) else None
         with self._lock:
-            session = self._sessions.get(token) if isinstance(token, str) else None
-            if session is not None and secrets.compare_digest(session.owner, owner):
-                self._sessions.pop(token).buffer.clear()
+            try:
+                self._get(owner, payload)
+                self._sessions.pop(payload["session"]).buffer.clear()
                 LOGGER.info("live_session_stopped")
-        return {"status": "STOPPED"}
+                return {"status": "STOPPED"}
+            except LiveBufferError:
+                return {"status": "REJECTED", "error_code": "LIVE_SESSION_NOT_FOUND"}
 
 
 def _client_report(client: dict) -> dict:

@@ -49,6 +49,26 @@ def test_real_gradio_wiring_keeps_private_submit_and_clears_stale_results():
     change = next(d for d in deps if d.fn.__name__ == "clear")
     assert click.api_visibility == "private" and click.concurrency_limit == 1
     assert change.api_visibility == "private"
-    card, raw = click.fn(None)
+    assert click.trigger_mode == "once"
+    assert any(d.cancels for d in deps)  # file changes cancel in-flight generator results
+    loading, (card, raw, button) = list(click.fn(None))
+    assert 'aria-busy="true"' in loading[0] and loading[1] is None
+    assert not loading[2]['interactive'] and not button['interactive']
     assert calls == [None] and "No file selected" in card and raw["error_code"] == "UPLOAD_REQUIRED"
-    assert change.fn("/tmp/x.mp4") == (EMPTY_CARD, None)
+    card, raw, button = change.fn("/tmp/x.mp4")
+    assert (card, raw) == (EMPTY_CARD, None) and button['interactive']
+
+
+def test_loading_errors_and_technical_details_are_sanitized():
+    import gradio as gr
+    from deployment.ui.upload_section import build_upload_section
+    def fail(_):
+        raise RuntimeError('/private/checkpoint secret')
+    ui = SimpleNamespace(config=SimpleNamespace(max_upload_bytes=1024), submit=fail)
+    with gr.Blocks() as demo:
+        build_upload_section(gr, ui)
+    fn = next(f.fn for f in demo.fns.values() if f.fn.__name__ == 'check')
+    loading, final = list(fn('unit.mp4'))
+    assert loading[1] is None
+    assert final[1] == {'status': 'REJECTED', 'predictions': None, 'error_code': 'UPLOAD_VALIDATION_FAILED'}
+    assert '/private' not in str(final) and 'secret' not in str(final)

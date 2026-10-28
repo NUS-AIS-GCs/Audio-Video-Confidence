@@ -1,11 +1,14 @@
 # Phase 8 frontend: branded layout and live capture
 
 Scope: Gradio layout, branding, navigation, responsive styling, a readable status card for the
-**Upload verification** tab, and the **Live verification** tab (webcam and microphone capture of
-ten aligned seconds). Predictions stay disabled: nothing in either tab produces or shows a score.
+**Upload verification** tab with local video preview and an E3 result area, and the **Live verification**
+tab (webcam and microphone capture of ten aligned seconds). Stage 2F adds authenticated capture
+ownership, transport bounds and deterministic cleanup. Predictions stay disabled: neither tab shows a score.
 
 Not changed: `deployment/runtime.py`, Gradio authentication, upload validation,
-`DeploymentUI.submit` and its private endpoint, launch options, and `audio/`, `vision/`, `fusion/`.
+`DeploymentUI.submit` and its private endpoint, and `audio/`, `vision/`, `fusion/`.
+Launch adds `live_app_kwargs(service)` for transport limits and shutdown cleanup; credentials and
+the 50 MiB upload limit remain unchanged. See `phase8_stage2f_frontend_security.md` for current evidence.
 
 ## Layout
 
@@ -33,8 +36,15 @@ The upload callback is still `DeploymentUI.submit` with the same private endpoin
   or raw error reaches the page. `MODEL_NOT_READY` and `REJECTED` are styled differently. The card
   never renders predictions, even if a result contained them.
 - Changing or removing the file clears the card and the raw JSON, so an old result is never shown
-  next to a new file.
-- The raw result stays available under a collapsed "Technical details" accordion.
+  next to a new file; the change event cancels in-flight verification generators.
+- Preview uses a browser-local Blob URL inside the authenticated page. Selection, removal, pagehide
+  and component teardown revoke old URLs. No second upload, preview-serving endpoint, server media
+  decoder or checkpoint is involved. Unsupported browser codecs get a preview-only message.
+- Verify shows a loading card and Gradio progress. Technical details are sanitized to the public
+  admission schema with null predictions; internal TRAIN responses cannot appear in either view.
+- Verify is disabled during and after a check because the secure callback removes the managed upload.
+  Choosing/removing a file re-enables it; select the clip again to check it again.
+- The E3 result area reserves decision/uncalibrated-score fields with "Unavailable" text only.
 
 | Upload | Card |
 | --- | --- |
@@ -72,12 +82,26 @@ shared clock: AudioContext.getOutputTimestamp()
 - **Rolling window.** The buffer is ready when the latest ten finalised seconds are all valid.
   `LiveBuffer.snapshot()` gives 160000 samples at 16 kHz and a `(10, 224, 224, 3)` uint8 array;
   `to_raw_media_input()` validates against `fusion.inference_contracts.RawMediaInput`.
-- **Server side.** `deployment/live/service.py` binds every live session to the Gradio session,
-  caps sessions (4), push size and frame size, and frees a session on stop or after 20 s idle.
-  Errors are stable codes and media bytes are never logged. The live module does not call any model.
+- **Server side.** The pinned Gradio login cookie is resolved against its server-side token registry.
+  Each capture also has a separate server-minted tab capability. Client usernames and `session_hash`
+  are not authentication or ownership evidence. Unsupported/missing authentication context rejects
+  capture. Four total sessions, two seconds of audio/eight chunks/four frames per push and existing
+  image limits remain. Pushes commit atomically, and stop/expiry/push share one lock.
+- **Transport.** `live_app_kwargs(service)` is required for launch/mount. Before JSON parsing, it
+  authenticates callers, then limits component requests to 3 MiB, five seconds to receive a body
+  and four in-flight operations. Anonymous callers do not occupy body-reader slots.
+  Envelope metadata is bounded before Gradio can allocate session state; `session_hash` is at most
+  128 ASCII characters and is never ownership evidence.
+  Compressed/multipart component bodies are rejected. Missing this guard disables live handlers.
+- **Expiry.** A worker checks idle captures at intervals no greater than one second. Twenty seconds
+  without a successful update expires a capture; stop and application shutdown also release media.
 - **Cleanup.** Stop, `pagehide`, a track `ended` event and server errors all release tracks, the
   audio graph, timers, canvases and the server session. Stop also resets the segment grid and
-  diagnostics, because the server discards the buffer.
+  diagnostics, because the server discards the buffer. Browser backlogs stop at 1.5 seconds of audio,
+  eight chunks or four frames; requests have a three-second logical deadline. At most three actual
+  Gradio calls may remain outstanding. Since these promises do not expose AbortSignal, another
+  capture stays disabled until outstanding calls settle (or the tab is reloaded). Late permission
+  grants release devices, and late successful session creation is stopped with its own capabilities.
 
 ### Diagnostics
 
@@ -97,7 +121,8 @@ after the timeline origin. It rolls out of the window within ten seconds.
 
 Permission denied, no device, device in use, a missing audio or video track, an insecure page, a
 device unplugged mid-capture, a stalled server and a browser without an audio clock each give a
-specific message and re-enable both start buttons. Muted tracks are reported per second as
+specific message. Start buttons remain disabled while a real network call is still outstanding.
+Muted tracks are reported per second as
 `muted_audio`.
 
 ### Review findings from the Stage 2E checklist
@@ -129,8 +154,9 @@ secure context: `localhost` or https.
 ## Tests
 
 ```
-python -m pytest -q tests/test_phase8_live.py tests/test_phase8_upload_ui.py tests/test_phase8_deployment.py
+python -m pytest -q tests/test_phase8_live.py tests/test_phase8_upload_ui.py tests/test_phase8_deployment.py tests/test_phase8_frontend_security.py
 node --test tests/js/test_live_timing.js
+node --test tests/js/test_live_security.js
 ```
 
 - `tests/test_phase8_live.py`: buffer, service limits, session binding, the review fixes (bounds
@@ -139,13 +165,14 @@ node --test tests/js/test_live_timing.js
 - `tests/test_phase8_upload_ui.py`: a message for every known code, no echo of unknown server text,
   no scores, and the real Gradio wiring (private submit, concurrency 1, clear on change).
 
-The full suite has 8 failures in `tests/test_fusion_contracts.py`; the same 8 fail on clean `main`.
+The earlier branch's eight-failure observation is superseded by the current Stage 2F regression
+evidence in `phase8_stage2f_frontend_security.md`.
 
 ## How to test by hand
 
 1. Start the app with the command above and open http://localhost:7861 (Chrome or Edge).
-2. Log in with the test credentials.
-3. **Upload tab:** press Check upload with no file, then try a valid 10 s MP4 (H.264 + AAC), a
+2. Log in with the test credentials (use unique runtime secrets for deployment).
+3. **Upload tab:** press Verify with no file, then try a valid 10 s MP4 (H.264 + AAC), a
    shorter clip and a non-video file renamed `.mp4`. Expect the cards in the table above. Remove
    the file and check that the card resets.
 4. **Live tab, Record 10 seconds:** allow camera and microphone. After about 12 s the state reads
@@ -189,8 +216,8 @@ dropped frames; that is the intended behaviour, and the background warning cover
 `build_upload_section(gr, ui)` keeps its signature and is called inside the Upload tab of
 `create_app()`. Swaraj can replace or extend its body with the video preview and results dashboard;
 `upload_card` and `UPLOAD_MESSAGES` can be reused for the status line.
-`DeploymentUI.submit` and its private endpoint must stay as they are. The live tab only needs the
-`LiveCaptureService` created in `create_app()`.
+`DeploymentUI.submit` and its private endpoint must stay as they are. The live tab uses the
+`LiveCaptureService` created in `create_app()`; launch/mount must supply `live_app_kwargs(service)`.
 
 When a model is ready, the hook is `LiveBuffer.to_raw_media_input()`: it returns a validated
 `RawMediaInput` for the current window. Wiring it to inference belongs to the backend owner.

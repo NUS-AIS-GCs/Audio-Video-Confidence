@@ -40,35 +40,36 @@ def test_real_gradio_wiring_keeps_private_submit_and_clears_stale_results():
     from deployment.ui.upload_section import build_upload_section
     calls = []
     ui = SimpleNamespace(config=SimpleNamespace(max_upload_bytes=50 * 1024 * 1024),
-                         submit=lambda path: calls.append(path) or {"status": "REJECTED", "predictions": None,
+                         submit_owned=lambda path, request: calls.append(path) or {"status": "REJECTED", "predictions": None,
                                                                     "error_code": "UPLOAD_REQUIRED"})
     with gr.Blocks() as demo:
         build_upload_section(gr, ui)
     deps = demo.fns.values()
-    click = next(d for d in deps if d.fn.__name__ == "check")
-    change = next(d for d in deps if d.fn.__name__ == "clear")
+    click = next(d for d in deps if getattr(d.fn, '__name__', '') == "check")
+    change = next(d for d in deps if getattr(d.fn, '__name__', '') == "clear")
     assert click.api_visibility == "private" and click.concurrency_limit == 1
     assert change.api_visibility == "private"
     assert click.trigger_mode == "once"
     assert any(d.cancels for d in deps)  # file changes cancel in-flight generator results
-    loading, (card, raw, button) = list(click.fn(None))
+    assert isinstance(click.inputs[0], gr.Textbox) and change.inputs == []
+    loading, (card, raw, button) = list(click.fn(None, None))
     assert 'aria-busy="true"' in loading[0] and loading[1] is None
     assert not loading[2]['interactive'] and not button['interactive']
     assert calls == [None] and "No file selected" in card and raw["error_code"] == "UPLOAD_REQUIRED"
-    card, raw, button = change.fn("/tmp/x.mp4")
+    card, raw, button = change.fn()
     assert (card, raw) == (EMPTY_CARD, None) and button['interactive']
 
 
 def test_loading_errors_and_technical_details_are_sanitized():
     import gradio as gr
     from deployment.ui.upload_section import build_upload_section
-    def fail(_):
+    def fail(_, request):
         raise RuntimeError('/private/checkpoint secret')
-    ui = SimpleNamespace(config=SimpleNamespace(max_upload_bytes=1024), submit=fail)
+    ui = SimpleNamespace(config=SimpleNamespace(max_upload_bytes=1024), submit_owned=fail)
     with gr.Blocks() as demo:
         build_upload_section(gr, ui)
-    fn = next(f.fn for f in demo.fns.values() if f.fn.__name__ == 'check')
-    loading, final = list(fn('unit.mp4'))
+    fn = next(f.fn for f in demo.fns.values() if getattr(f.fn, '__name__', '') == 'check')
+    loading, final = list(fn('unit.mp4', None))
     assert loading[1] is None
     assert final[1] == {'status': 'REJECTED', 'predictions': None, 'error_code': 'UPLOAD_VALIDATION_FAILED'}
     assert '/private' not in str(final) and 'secret' not in str(final)

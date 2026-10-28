@@ -1,7 +1,7 @@
 """Upload preview and admission results on the existing authenticated boundary.
 
-The secure callback (`DeploymentUI.submit`) and its private endpoint options are unchanged: this module
-turns its sanitised result into a readable status card. No internal TRAIN result is a public result.
+The private callback resolves only a session-owned handle before admission. No internal
+TRAIN result is a public result; Gradio must never preprocess user file paths here.
 
 The card never shows a prediction or score. It shows the status and a fixed message per error code;
 unknown codes get a generic message, so no raw server text reaches the page.
@@ -12,6 +12,8 @@ import re
 
 # error_code -> (title, what the user can do). Messages are fixed text, never server output.
 UPLOAD_MESSAGES = {
+    "UPLOAD_AUTHENTICATION_REQUIRED": ("Sign in again", "Your upload session is not available. Sign in and select the file again."),
+    "UPLOAD_NOT_FOUND": ("Upload expired or unavailable", "Select the file again, then press Verify."),
     "UPLOAD_REQUIRED": ("No file selected", "Choose one 10-second video file, then press Verify."),
     "UPLOAD_TOO_LARGE": ("File too large", "The file is over the upload limit. Export a smaller 10-second clip."),
     "UNSUPPORTED_FILENAME": ("File name not accepted", "Rename the file using letters, numbers, dashes or underscores."),
@@ -94,17 +96,17 @@ def upload_card(result) -> str:
 
 
 def build_upload_section(gr, ui) -> None:
-    def check(upload_path):
+    def check(upload_handle, request: gr.Request):
         yield LOADING_CARD, None, gr.update(interactive=False)
         try:
-            result = public_admission_result(ui.submit(upload_path))
+            result = public_admission_result(ui.submit_owned(upload_handle, request))
         except Exception:
             result = {"status": "REJECTED", "predictions": None, "error_code": "UPLOAD_VALIDATION_FAILED"}
         # DeploymentUI consumes/removes its managed upload. Do not offer another
         # check against that deleted path; selection/change re-enables Verify.
         yield upload_card(result), result, gr.update(interactive=False)
 
-    def clear(_upload_path):
+    def clear():
         return EMPTY_CARD, None, gr.update(interactive=True)
 
     gr.HTML(f"<style>{UPLOAD_CSS}</style>", padding=False)
@@ -114,6 +116,8 @@ def build_upload_section(gr, ui) -> None:
                 "Preview the clip, then press **Verify**. This checks admission only: "
                 "**MODEL_NOT_READY — predictions remain disabled**. "
                 "Uploads are removed after checking; select the file again to run another check.")
+    gr.Markdown("Uploads not checked expire within five minutes, with cleanup checked every second. "
+                "The preview uses your local file; server-side media downloads are disabled.")
     uploaded = gr.File(
         label="One 10-second audio-video file (MP4, MOV, MKV, or WebM)",
         file_count="single",
@@ -121,6 +125,13 @@ def build_upload_section(gr, ui) -> None:
         type="filepath",
         elem_id="av-upload-source",
     )
+    # Never pass a FileData object through backend preprocessing: Gradio moves
+    # file inputs into a shared cache even when preprocess=False. The frontend
+    # forwards only our opaque handle into a scalar input. Server ownership
+    # checks remain authoritative if this hidden value is forged.
+    handle = gr.Textbox(visible=False)
+    uploaded.change(fn=None, inputs=uploaded, outputs=handle,
+                    js="(file) => file && typeof file.path === 'string' ? file.path : ''", queue=False)
     gr.HTML(value="", html_template=(
         f'<div class="av-upload-preview" data-limit="{ui.config.max_upload_bytes}">'
         '<video controls playsinline preload="metadata" hidden aria-label="Uploaded video preview"></video>'
@@ -135,7 +146,7 @@ def build_upload_section(gr, ui) -> None:
     gr.HTML(E3_PENDING, padding=False)
     verify = submit.click(
         fn=check,
-        inputs=uploaded,
+        inputs=handle,
         outputs=[card, output, submit],
         api_name=None,
         api_visibility="private",
@@ -143,5 +154,5 @@ def build_upload_section(gr, ui) -> None:
         show_progress="full",
         trigger_mode="once",
     )
-    uploaded.change(fn=clear, inputs=uploaded, outputs=[card, output, submit], api_name=None,
+    uploaded.change(fn=clear, inputs=None, outputs=[card, output, submit], api_name=None,
                     api_visibility="private", queue=False, cancels=[verify])

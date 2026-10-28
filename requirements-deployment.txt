@@ -1,4 +1,5 @@
-# Candidate direct runtime pins for the CPU deployment image.
+# Direct runtime pins for the CPU deployment image. The Dockerfile also installs
+# the complete audited closure in deployment/requirements-runtime.lock.
 # The matching PyTorch/TorchVision/TorchAudio releases are published together
 # by the official CPU wheel index. No model weights are fetched by this file.
 --extra-index-url https://download.pytorch.org/whl/cpu
@@ -13,3 +14,5 @@ tqdm==4.67.1
 opencv-python-headless==4.12.0.88
 pillow==12.0.0
 gradio==6.30.0
+filelock==4.2.4
+python-multipart==0.0.32

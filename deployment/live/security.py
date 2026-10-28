@@ -8,8 +8,6 @@ Unsupported auth modes or a missing transport guard disable live capture.
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import importlib.metadata
 import json
 from contextlib import asynccontextmanager
 from threading import BoundedSemaphore
@@ -17,6 +15,7 @@ from threading import BoundedSemaphore
 from starlette.requests import Request
 
 from .buffer import LiveBufferError
+from deployment.auth import login_owner
 
 MAX_LIVE_BODY_BYTES = 3 * 1024 * 1024
 MAX_LIVE_REQUESTS = 4
@@ -24,44 +23,38 @@ BODY_TIMEOUT_S = 5.0
 
 
 def live_app_kwargs(service):
-    """Use for launch or mount; mounted Gradio apps compose router lifespans directly."""
+    """Install all deployment guards on launch/mount, including upload lifecycle."""
     from starlette.middleware import Middleware
+    from deployment.uploads import UploadTransportMiddleware
+
+    uploads = getattr(service, "upload_store", None)
 
     @asynccontextmanager
     async def lifespan(_app):
+        if uploads is not None:
+            uploads.start()
         try:
             yield
         finally:
             service.close()
+            if uploads is not None:
+                uploads.close()
 
-    return {"middleware": [Middleware(LiveTransportMiddleware, service=service)], "lifespan": lifespan}
+    guards = [Middleware(LiveTransportMiddleware, service=service)]
+    if uploads is not None:
+        guards.insert(0, Middleware(UploadTransportMiddleware, store=uploads))
+    return {"middleware": guards, "lifespan": lifespan}
 
 
 def request_owner(request) -> str:
     if not isinstance(request, Request) or not request.scope.get("aval.live_bounded"):
         raise LiveBufferError("LIVE_AUTHENTICATION_REQUIRED")
-    try:
-        supported = importlib.metadata.version("gradio") == "6.30.0"
-    except importlib.metadata.PackageNotFoundError:
-        supported = False
-    if not supported:
-        raise LiveBufferError("LIVE_AUTHENTICATION_REQUIRED")
-    app = request.app
-    # This bridge deliberately supports the pinned built-in Gradio login only.
-    if not getattr(app, "auth", None) or getattr(app, "auth_dependency", None) is not None:
-        raise LiveBufferError("LIVE_AUTHENTICATION_REQUIRED")
-    registry = getattr(app, "tokens", None)
-    cookie_id = getattr(app, "cookie_id", None)
-    if not isinstance(registry, dict) or not isinstance(cookie_id, str):
-        raise LiveBufferError("LIVE_AUTHENTICATION_REQUIRED")
-    token = request.cookies.get(f"access-token-{cookie_id}") or request.cookies.get(
-        f"access-token-unsecure-{cookie_id}")
-    username = registry.get(token) if isinstance(token, str) else None
-    if not isinstance(username, str) or not username:
+    owner = login_owner(request)
+    if owner is None:
         raise LiveBufferError("LIVE_AUTHENTICATION_REQUIRED")
     # Different logins for the same account also remain separate. No cookie is
     # retained in a capture session, diagnostic, response, or log.
-    return hashlib.sha256((username + "\0" + token).encode("utf-8")).hexdigest()
+    return owner
 
 
 class LiveTransportMiddleware:

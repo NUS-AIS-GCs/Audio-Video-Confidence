@@ -39,3 +39,4 @@ embeddings/
 wandb
 audio_final
 vision_final
+vision_final_models/

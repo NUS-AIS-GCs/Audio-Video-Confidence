@@ -18,11 +18,13 @@ from audio.model import EmbeddingHead
 
 
 class BeatsLoRA(nn.Module):
-    def __init__(self, encoder: str, r: int, alpha: float, emb_dim: int, fdir, device="cpu"):
+    def __init__(self, encoder: str, r: int, alpha: float, emb_dim: int, fdir=None, device="cpu",
+                 beats_path=None, stats=None):
+        """fdir: frozen embedding cache (training). For inference bundles pass beats_path and stats=(mean, std)."""
         super().__init__()
-        self.beats = load_beats(encoder, device)
+        self.beats = load_beats(encoder, device, path=beats_path)
         self.n_lora_layers = inject_lora(self.beats, ("q_proj", "v_proj"), r=r, alpha=alpha)
-        mean, std, _ = norm_stats(fdir)                    # 768-D stats of the frozen embedding cache
+        mean, std = stats if stats is not None else norm_stats(fdir)[:2]   # 768-D stats of the frozen embedding cache
         self.register_buffer("mean", mean)
         self.register_buffer("std", std)
         self.head = EmbeddingHead(in_dim=self.beats.cfg.encoder_embed_dim, emb_dim=emb_dim)

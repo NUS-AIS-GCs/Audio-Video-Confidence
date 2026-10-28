@@ -56,6 +56,7 @@ def http_app(tmp_path, monkeypatch):
         clients.append(client)
         def login(username):
             c = TestClient(app)
+            c.portal = client.portal
             assert c.post('/login', data={'username': username, 'password': password}).status_code == 200
             clients.append(c)
             return c
@@ -95,7 +96,7 @@ def test_http_authentication_and_no_anonymous_fallback(http_app):
     forged = type('Forged', (), {'username': 'alice', 'session_hash': 'claim'})()
     assert fn({'sample_rate': 16000}, forged) == {
         'status': 'MODEL_NOT_READY', 'predictions': None, 'error_code': 'LIVE_AUTHENTICATION_REQUIRED'}
-    with mock.patch('deployment.live.security.importlib.metadata.version', return_value='unsupported'):
+    with mock.patch('deployment.auth.importlib.metadata.version', return_value='unsupported'):
         r = call(alice, 'tab', 'live_start', {'sample_rate':16000})
         assert r.status_code == 401 and r.json()['predictions'] is None
 
@@ -186,6 +187,15 @@ def test_http_upload_then_public_handler_remains_fail_closed(http_app, tmp_path)
     uploaded = alice.post('/gradio_api/upload', files={'files': ('unit.mp4', b'unit-only container fixture', 'video/mp4')})
     assert uploaded.status_code == 200
     path = uploaded.json()[0]
+    # The transport now returns a session-owned opaque handle, never a cache path.
+    entry = demo.aval_upload_store._entries[path]
+    import gradio as gr
+    from starlette.requests import Request
+    from starlette.routing import Mount
+    inner = next(r.app for r in alice.app.routes if isinstance(r, Mount) and hasattr(r.app, 'tokens'))
+    request = gr.Request(Request({'type':'http', 'app':inner, 'headers':[(b'cookie',
+        '; '.join(f'{k}={v}' for k,v in alice.cookies.items()).encode())],
+        'aval.upload_guard':demo.aval_upload_store}))
     metadata = {'format': {'format_name': 'mov,mp4', 'tags': {'major_brand': 'isom'}},
                 'streams': [{'codec_type': 'video', 'codec_name': 'h264', 'duration': '10'},
                             {'codec_type': 'audio', 'codec_name': 'aac', 'duration': '10'}]}
@@ -193,11 +203,11 @@ def test_http_upload_then_public_handler_remains_fail_closed(http_app, tmp_path)
     with mock.patch('deployment.runtime.shutil.which', return_value='unit-ffprobe'), \
          mock.patch('deployment.runtime._run_bounded_process', return_value=(0, json.dumps(metadata).encode(), b'')), \
          mock.patch('torch.load', side_effect=AssertionError('public upload must not load a model')):
-        _, (_, result, button) = list(fn(path))
+        _, (_, result, button) = list(fn(path, request))
     assert result['status'] == 'MODEL_NOT_READY' and result['predictions'] is None
     assert result['error_code'] == 'RAW_INFERENCE_GATE_CLOSED'
     assert button['interactive'] is False
-    assert not Path(path).exists()  # original uploader cleanup is preserved
+    assert not entry.path.exists() and path not in demo.aval_upload_store._entries
 
 
 @pytest.mark.parametrize('bad_start', [-1, 1.5, True, 10**100, None])

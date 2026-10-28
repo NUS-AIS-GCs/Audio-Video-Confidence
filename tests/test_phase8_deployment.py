@@ -301,6 +301,7 @@ class UploadAdmissionTests(unittest.TestCase):
             def __exit__(self, *_): return False
             def queue(self, **kwargs): self.queue_options = kwargs
             def launch(self, **kwargs): self.launch_options = kwargs
+            def close(self): self.closed = True
         class Component:
             def __init__(self, *args, **kwargs):
                 self.args, self.kwargs = args, kwargs
@@ -318,6 +319,7 @@ class UploadAdmissionTests(unittest.TestCase):
             "Blocks": Blocks,
             "Markdown": staticmethod(lambda *_args, **_kwargs: None),
             "File": Component,
+            "Textbox": Component,
             "Button": Component,
             "JSON": Component,
         })
@@ -327,6 +329,7 @@ class UploadAdmissionTests(unittest.TestCase):
         with mock.patch.object(gradio_app, "create_app", return_value=(demo, config)):
             gradio_app.main()
         self.assertEqual(demo.queue_options["default_concurrency_limit"], 1)
+        self.assertFalse(demo.queue_options["api_open"])
         self.assertEqual(config.max_upload_bytes, runtime.MAX_UPLOAD_BYTES_HARD_LIMIT)
         upload = next(component for component in components if "file_types" in component.kwargs)
         self.assertEqual(upload.kwargs["type"], "filepath")
@@ -335,6 +338,8 @@ class UploadAdmissionTests(unittest.TestCase):
         self.assertEqual(button.click_options["concurrency_limit"], 1)
         self.assertFalse(demo.kwargs["analytics_enabled"])
         self.assertEqual(demo.launch_options["auth"], config.gradio_auth)
+        self.assertTrue(demo.launch_options["prevent_thread_lock"])
+        self.assertTrue(demo.closed)
 
     def test_gradio_calls_match_the_pinned_blocks_api_signatures(self):
         """Guard the real application call against the Gradio 6.30.0 API."""

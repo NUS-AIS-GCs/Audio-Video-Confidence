@@ -306,7 +306,15 @@ class UploadAdmissionTests(unittest.TestCase):
                 self.args, self.kwargs = args, kwargs
                 components.append(self)
             def click(self, **kwargs): self.click_options = kwargs
+            def change(self, **kwargs): self.change_options = kwargs
+            def __enter__(self): return self
+            def __exit__(self, *_): return False
         fake = type("FakeGradio", (), {
+            "Request": object,
+            "HTML": Component,
+            "Tabs": Component,
+            "Tab": Component,
+            "Accordion": Component,
             "Blocks": Blocks,
             "Markdown": staticmethod(lambda *_args, **_kwargs: None),
             "File": Component,

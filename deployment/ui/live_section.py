@@ -19,7 +19,8 @@ LIVE_TEMPLATE = """
   </div>
   <div class="av-live-side">
     <div class="av-controls">
-      <button class="av-btn av-primary av-start" type="button">Start camera &amp; mic</button>
+      <button class="av-btn av-primary av-record" type="button">Record 10 seconds</button>
+      <button class="av-btn av-start" type="button">Start rolling capture</button>
       <button class="av-btn av-stop" type="button" disabled>Stop</button>
     </div>
     <p class="av-state" data-kind="idle" role="status" aria-live="polite">Idle</p>
@@ -101,9 +102,11 @@ def build_live_section(gr, service: LiveCaptureService) -> None:
 
     gr.Markdown(
         "### Live verification\n"
-        "Record from your webcam and microphone. AValidate keeps the latest ten seconds, aligned second by "
-        "second on one shared clock, and shows whether each second has both a camera frame and complete audio. "
-        "**Predictions are disabled**: this section shows buffer readiness and sync diagnostics only.")
+        "Record from your webcam and microphone. AValidate aligns audio and camera frames second by second "
+        "on one shared clock and shows whether each second has both a camera frame and complete audio. "
+        "**Record 10 seconds** stops by itself once ten aligned seconds are captured and checked; "
+        "**Start rolling capture** keeps the latest ten seconds until you press Stop. "
+        "**Predictions are disabled**: this section shows capture and sync diagnostics only.")
     gr.HTML(
         value="",
         html_template=LIVE_TEMPLATE,

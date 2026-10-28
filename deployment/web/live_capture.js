@@ -9,7 +9,7 @@
   const JPEG_QUALITY = 0.9;
   const $ = function (sel) { return element.querySelector(sel); };
   const ui = {
-    video: $(".av-preview"), start: $(".av-start"), stop: $(".av-stop"), check: $(".av-check"),
+    video: $(".av-preview"), start: $(".av-start"), record: $(".av-record"), stop: $(".av-stop"), check: $(".av-check"),
     state: $(".av-state"), msg: $(".av-msg"), grid: $(".av-grid"), diag: $(".av-diag"),
     meter: $(".av-meter-fill"), contract: $(".av-contract"),
   };
@@ -73,15 +73,16 @@
     }
   }
 
-  async function start() {
+  // mode "record": stop by itself once ten aligned seconds are captured and checked; "rolling": run until Stop
+  async function start(mode) {
     if (cap) return;
-    setMessage(""); ui.contract.textContent = ""; renderGrid(null);
+    setMessage(""); ui.contract.textContent = ""; ui.diag.innerHTML = ""; renderGrid(null);
     if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setMessage(AVTiming.permissionMessage({ name: "INSECURE_CONTEXT" }), "error"); return;
     }
-    ui.start.disabled = true;
+    ui.start.disabled = true; ui.record.disabled = true;
     setState("Requesting camera and microphone…", "busy");
-    const c = { stream: null, ctx: null, node: null, session: null, timer: null, rvfc: null, raf: null,
+    const c = { mode: mode, stream: null, ctx: null, node: null, session: null, timer: null, rvfc: null, raf: null,
                 pushing: false, stopped: false, clock: null, audio: AVTiming.makeAudioAccumulator(),
                 picker: AVTiming.makeFramePicker(), canvases: new Map(), frames: [], pendingAudio: [],
                 client: {}, clockTries: 0, fpsCount: 0, fpsSince: performance.now() };
@@ -127,7 +128,7 @@
             if (++c.clockTries > CLOCK_TRIES) stop(AVTiming.permissionMessage({ name: "NO_AUDIO_CLOCK" }), "error");
             return;
           }
-          setState("Capturing: filling the 10-second buffer…", "busy");
+          setState(c.mode === "record" ? "Recording: capturing 10 aligned seconds…" : "Capturing: filling the 10-second buffer…", "busy");
           watchFrames();
         }
         const idx = c.clock.frameToSample(m.frame);
@@ -204,6 +205,7 @@
         stop("Capture stopped by the server (" + ((d && d.error_code) || "no response") + ").", "error"); return;
       }
       renderGrid(d); renderDiag(d);
+      if (c.mode === "record" && d.ready) { await finishRecording(c); return; }
       ui.check.disabled = !d.ready;
       if (d.ready) setState("Buffer ready: 10 aligned seconds", "ok");
       else setState("Capturing: " + d.segments_valid + " / 10 valid seconds", "busy");
@@ -215,16 +217,36 @@
     } finally { c.pushing = false; }
   }
 
+  function describeCheck(r) {
+    if (!r || r.status !== "CONTRACT_VALID") return "Window not accepted (" + ((r && r.error_code) || "error") + ").";
+    const t = r.timing || {};
+    return "Window passes the backend RawMediaInput contract: audio " + r.waveform_shape.join("×") +
+      ", frames " + r.frames_shape.join("×") + ". Camera frames were captured within " + t.max_abs_frame_offset_ms +
+      " ms of their second (limit " + t.frame_tolerance_ms + " ms)" +
+      (t.clipped_samples ? "; " + t.clipped_samples + " audio samples were clipped" : "") +
+      ". Live capture is not yet verified against the encoders' training input, and no prediction is produced.";
+  }
+
   async function check() {
-    if (!cap || !cap.session) return;
+    if (!cap || !cap.session) return null;
     const r = await server.live_check({ session: cap.session });
-    ui.contract.textContent = r && r.status === "CONTRACT_VALID"
-      ? "Window passes the backend RawMediaInput contract: audio " + r.waveform_shape.join("×") + ", frames " + r.frames_shape.join("×") + ". No prediction is produced until the model is integrated."
-      : "Window not accepted (" + ((r && r.error_code) || "error") + ").";
+    ui.contract.textContent = describeCheck(r);
+    return r;
+  }
+
+  // Record mode: check the first complete window, then release the devices but keep the result on screen.
+  async function finishRecording(c) {
+    let r = null;
+    try { r = await check(); } catch (e) { r = null; }
+    if (c.stopped) return;
+    const ok = r && r.status === "CONTRACT_VALID";
+    stop(ok ? "" : "The recording could not be checked. Press Record to try again.", ok ? "" : "error", true);
+    setState(ok ? "Recorded: 10 aligned seconds" : "Stopped", ok ? "ok" : "error");
   }
 
   // Releases devices, audio graph, timers and the server session. Safe to call more than once.
-  function stop(message, kind) {
+  // keepResult leaves the last grid, diagnostics and check on screen (a finished recording).
+  function stop(message, kind, keepResult) {
     const c = cap; cap = null;
     if (c) {
       c.stopped = true;
@@ -242,13 +264,14 @@
     ui.video.srcObject = null;
     ui.meter.style.width = "0%";
     // The server discards the buffer on stop, so the display must not keep showing it as ready.
-    renderGrid(null); ui.diag.innerHTML = ""; ui.contract.textContent = "";
-    ui.start.disabled = false; ui.stop.disabled = true; ui.check.disabled = true;
+    if (!keepResult) { renderGrid(null); ui.diag.innerHTML = ""; ui.contract.textContent = ""; }
+    ui.start.disabled = false; ui.record.disabled = false; ui.stop.disabled = true; ui.check.disabled = true;
     setState(message && kind === "error" ? "Stopped" : "Idle", message && kind === "error" ? "error" : "idle");
     setMessage(message || "", kind);
   }
 
-  ui.start.addEventListener("click", start);
+  ui.start.addEventListener("click", function () { start("rolling"); });
+  ui.record.addEventListener("click", function () { start("record"); });
   ui.stop.addEventListener("click", function () { stop(); });
   ui.check.addEventListener("click", check);
   window.addEventListener("pagehide", function () { stop(); });

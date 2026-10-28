@@ -21,7 +21,8 @@ The research Streamlit application remains `app.py` and is not the Docker entry 
 ## Frontend and live capture
 
 The Gradio app has a branded layout with Upload verification, Live verification and About tabs.
-The Live tab records from a webcam and microphone into a rolling ten-second buffer and shows buffer
-readiness and sync diagnostics only; predictions stay disabled. See
+The Upload tab shows a plain status card for each upload check. The Live tab records ten aligned
+seconds from a webcam and microphone (or keeps a rolling ten-second buffer) and shows capture and
+sync diagnostics only. Predictions stay disabled in both. See
 [docs/phase8_frontend_live.md](docs/phase8_frontend_live.md) for usage, architecture, tests and
 integration notes.

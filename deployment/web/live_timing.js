@@ -55,13 +55,14 @@ const AVTiming = (function () {
     };
   }
 
-  // Float32 [-1, 1] -> little-endian int16 PCM bytes
+  // Float32 [-1, 1] -> little-endian int16 PCM bytes. One scale for both signs, as FFmpeg's flt -> s16
+  // conversion (round(x * 32768), clipped to the int16 range); the server divides by 32768 like soundfile.
   function floatToPcm16(samples) {
     const out = new Uint8Array(samples.length * 2);
     const view = new DataView(out.buffer);
     for (let i = 0; i < samples.length; i++) {
-      const s = Math.max(-1, Math.min(1, samples[i]));
-      view.setInt16(2 * i, s < 0 ? Math.round(s * 32768) : Math.round(s * 32767), true);
+      const v = Math.round(Math.max(-1, Math.min(1, samples[i])) * 32768);
+      view.setInt16(2 * i, Math.max(-32768, Math.min(32767, v)), true);
     }
     return out;
   }
@@ -107,13 +108,13 @@ const AVTiming = (function () {
     switch (name) {
       case "NotAllowedError":
       case "SecurityError":
-        return "Camera or microphone permission was denied. Allow both in the browser's site settings and press Start again.";
+        return "Camera or microphone permission was denied. Allow both in the browser's site settings and try again.";
       case "NotFoundError":
       case "OverconstrainedError":
-        return "No camera or microphone was found. Connect both devices and press Start again.";
+        return "No camera or microphone was found. Connect both devices and try again.";
       case "NotReadableError":
       case "AbortError":
-        return "The camera or microphone is in use by another application. Close it and press Start again.";
+        return "The camera or microphone is in use by another application. Close it and try again.";
       case "NO_AUDIO_CLOCK":
         return "This browser does not provide the audio clock needed to align audio and video. Use a current version of Chrome or Edge.";
       case "INSECURE_CONTEXT":

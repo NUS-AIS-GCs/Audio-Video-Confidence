@@ -370,3 +370,85 @@ def test_frontend_widget_wiring():
     html = [b for b in demo.blocks.values() if isinstance(b, gr.HTML)]
     assert len(html) == 1
     assert sorted(f.__name__ for f in html[0].server_fns) == ["live_check", "live_push", "live_start", "live_stop"]
+
+
+# ---- review findings (docs/phase8_frontend_integration_checklist.md) -------------------------------
+def test_oversized_audio_is_rejected_before_any_base64_decoding(monkeypatch):
+    from deployment.live import service as S
+    svc = LiveCaptureService()
+    token = svc.start("o", {"sample_rate": 16_000})["session"]
+    big = "A" * (S._b64_limit(2 * 2 * 16_000) + 8 * 4 + 4)       # just over 2 s of int16 at 16 kHz
+    calls = []
+    monkeypatch.setattr(S.base64, "b64decode", lambda *a, **k: calls.append(1))
+    r = svc.push("o", {"session": token, "audio": [{"start": 0, "pcm": big[: len(big) // 2]},
+                                                   {"start": 0, "pcm": big[len(big) // 2:]}]})
+    assert r == {"status": "REJECTED", "error_code": "PUSH_TOO_LARGE"} and calls == []
+
+
+def test_oversized_frame_string_is_rejected_before_decoding(monkeypatch):
+    from deployment.live import service as S
+    svc = LiveCaptureService()
+    token = svc.start("o", {"sample_rate": 16_000})["session"]
+    calls = []
+    monkeypatch.setattr(S.base64, "b64decode", lambda *a, **k: calls.append(1))
+    r = svc.push("o", {"session": token, "frames": [{"t": 0.0, "image": "A" * (S._b64_limit(S.MAX_FRAME_BYTES) + 4)}]})
+    assert r == {"status": "REJECTED", "error_code": "INVALID_FRAME_PAYLOAD"} and calls == []
+
+
+@pytest.mark.parametrize("ext", [".jpg", ".png"])
+def test_image_header_size_is_read_without_decoding(ext):
+    from deployment.live.service import image_size
+    raw = cv2.imencode(ext, np.zeros((37, 53, 3), np.uint8))[1].tobytes()
+    assert image_size(raw) == (53, 37)
+    assert image_size(b"\xff\xd8\xff\xd9") is None and image_size(b"\x89PNG\r\n\x1a\n") is None
+
+
+def test_huge_declared_dimensions_never_reach_the_pixel_decoder(monkeypatch):
+    raw = bytearray(cv2.imencode(".png", np.zeros((8, 8, 3), np.uint8))[1].tobytes())
+    raw[16:24] = (40_000).to_bytes(4, "big") * 2                  # header claims 40000 x 40000
+    monkeypatch.setattr(cv2, "imdecode", lambda *a: pytest.fail("pixel decoder must not run"))
+    with pytest.raises(LiveBufferError, match="INVALID_FRAME_PAYLOAD"):
+        decode_frame(base64.b64encode(bytes(raw)).decode())
+
+
+def test_check_reports_achieved_frame_times_and_unverified_capture_profile():
+    svc = LiveCaptureService()
+    token, _ = run_session(svc, "o", 12.0)
+    r = svc.check("o", {"session": token})
+    t = r["timing"]
+    assert r["status"] == "CONTRACT_VALID" and r["inference"] == "NOT_CONNECTED" and r["predictions"] is None
+    assert r["capture"]["encoder_compatibility"] == "NOT_VERIFIED"
+    assert t["frame_timestamps_are_bin_labels"] is True
+    assert t["frame_offsets_ms"] == [10.0] * 10                    # run_session stamps frames at k + 0.01 s
+    assert t["frame_capture_times_s"] == [round(i + 0.01, 4) for i in range(10)]
+    assert t["max_abs_frame_offset_ms"] == 10.0 and t["frame_tolerance_ms"] == 100
+    assert len(t["source_seconds"]) == 10 and t["clipped_samples"] == 0 and t["resampled"] is False
+
+
+def test_snapshot_counts_samples_clipped_by_resampling():
+    buf = LiveBuffer(48_000)
+    feed(buf, 12.0, sr=48_000)
+    k = buf.window()[3]
+    buf._seconds[k].audio[:] = np.where(np.arange(48_000) // 120 % 2, 1.0, -1.0)  # 200 Hz full-scale square: Gibbs overshoot
+    s = buf.snapshot()
+    assert s["timing"]["clipped_samples"] > 0 and s["timing"]["resampled"] is True
+    assert np.abs(s["waveform"]).max() <= 1.0
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js not installed")
+def test_browser_pcm_scaling_matches_ffmpeg_and_soundfile_round_trip():
+    # FFmpeg flt->s16 is round(x * 32768) clipped; soundfile reads int16 / 32768: exact on that grid
+    x = [0, 0.5, -0.5, 0.25, -0.25, 1, -1, 12345 / 32768, -12345 / 32768]
+    js = ("const T=require(process.argv[1]);const x=new Float32Array(JSON.parse(process.argv[2]));"
+          "process.stdout.write(T.bytesToBase64(T.floatToPcm16(x)));")
+    out = subprocess.run([NODE, "-e", js, str(ROOT / "deployment" / "web" / "live_timing.js"), json.dumps(x)],
+                         capture_output=True, text=True, check=True).stdout
+    expected = np.clip(np.round(np.float32(x) * 32768), -32768, 32767) / 32768
+    assert np.array_equal(decode_pcm16(out), expected.astype(np.float32))
+
+
+def test_record_mode_is_wired_and_never_renders_predictions():
+    from deployment.ui.live_section import LIVE_TEMPLATE, live_js
+    js = live_js()
+    assert "av-record" in LIVE_TEMPLATE and 'start("record")' in js and "finishRecording" in js
+    assert "probab" not in js.lower() and "score" not in js.lower()

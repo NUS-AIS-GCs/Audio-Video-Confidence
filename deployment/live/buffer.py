@@ -208,17 +208,32 @@ class LiveBuffer:
             raise LiveBufferError("LIVE_BUFFER_NOT_READY")
         w = self.window()
         audio = np.concatenate([self._seconds[k].audio for k in w])
-        waveform = resample_to_16k(audio, self.sample_rate)
+        resampled = _resample(audio, self.sample_rate)
+        clipped = int(np.count_nonzero(np.abs(resampled) > 1.0))
+        waveform = np.clip(resampled, -1.0, 1.0).astype(np.float32)
         frames = np.stack([self._seconds[k].frame for k in w])
+        offsets = [self._seconds[k].frame_offset_s for k in w]
+        # what was actually achieved, kept apart from the contract's 0..9 bin labels
+        timing = {
+            "frame_timestamps_are_bin_labels": True,
+            "frame_capture_times_s": [round(i + o, 4) for i, o in enumerate(offsets)],
+            "frame_offsets_ms": [round(1000 * o, 1) for o in offsets],
+            "max_abs_frame_offset_ms": round(1000 * max(abs(o) for o in offsets), 1),
+            "frame_tolerance_ms": round(1000 * FRAME_TOLERANCE_S),
+            "source_seconds": list(w),
+            "capture_sample_rate": self.sample_rate,
+            "resampled": self.sample_rate != TARGET_SR,
+            "clipped_samples": clipped,
+        }
         return {"waveform": waveform, "frames": frames, "sample_rate": TARGET_SR,
                 "frame_timestamps": tuple(float(i) for i in range(SEGMENTS)),
-                "source_seconds": tuple(w), "capture_sample_rate": self.sample_rate}
+                "source_seconds": tuple(w), "capture_sample_rate": self.sample_rate, "timing": timing}
 
-    def to_raw_media_input(self):
+    def to_raw_media_input(self, snapshot: dict | None = None):
         """Wrap the snapshot in the backend's RawMediaInput contract and validate it (no model run)."""
         import torch
         from fusion.inference_contracts import RawMediaInput
-        s = self.snapshot()
+        s = snapshot if snapshot is not None else self.snapshot()
         media = RawMediaInput(
             waveform=torch.from_numpy(s["waveform"].copy())[None],
             frames=torch.from_numpy(s["frames"].copy())[None],
@@ -235,7 +250,12 @@ class LiveBuffer:
 
 
 def resample_to_16k(audio: np.ndarray, sr: int) -> np.ndarray:
-    """Band-limited resampling of the whole window at once (no per-chunk edge artefacts)."""
+    """Band-limited resampling of the whole window at once (no per-chunk edge artefacts), clipped to
+    [-1, 1] for the contract. snapshot() reports how many samples the clip changed."""
+    return np.clip(_resample(audio, sr), -1.0, 1.0).astype(np.float32)
+
+
+def _resample(audio: np.ndarray, sr: int) -> np.ndarray:
     if sr == TARGET_SR:
         out = audio.astype(np.float32, copy=True)
     else:
@@ -245,4 +265,4 @@ def resample_to_16k(audio: np.ndarray, sr: int) -> np.ndarray:
     out = out[: SEGMENTS * TARGET_SR]
     if len(out) != SEGMENTS * TARGET_SR:
         raise LiveBufferError("RESAMPLE_LENGTH_MISMATCH")
-    return np.clip(out, -1.0, 1.0).astype(np.float32)
+    return out

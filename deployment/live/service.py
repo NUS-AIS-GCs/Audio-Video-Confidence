@@ -34,6 +34,18 @@ MAX_FRAMES_PER_PUSH = 4
 MAX_FRAME_BYTES = 400 * 1024
 MAX_FRAME_SIDE = 1920
 
+# How live media is produced, so nobody mistakes it for the TRAIN MP4/FFmpeg path. The live path has
+# not been measured against that path, so encoder compatibility stays NOT_VERIFIED.
+CAPTURE_PROFILE = {
+    "id": "aval.live-capture.v0",
+    "audio": "browser AudioWorklet float32 -> int16 (x32768, clipped, as FFmpeg flt->s16) -> /32768; "
+             "the 10 s window is resampled to 16 kHz with torchaudio when the capture rate differs",
+    "video": "browser canvas JPEG (quality 0.9, longest side <= 640) -> OpenCV decode, BGR -> RGB, "
+             "INTER_LINEAR to 224 x 224",
+    "clock": "browser AudioContext sample counter; camera frames mapped onto it with getOutputTimestamp()",
+    "encoder_compatibility": "NOT_VERIFIED",
+}
+
 
 @dataclass
 class _Session:
@@ -57,11 +69,49 @@ def decode_pcm16(text) -> np.ndarray:
     return np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
 
 
+def _b64_limit(n_bytes: int) -> int:
+    """Longest base64 string that can decode to n_bytes."""
+    return 4 * -(-n_bytes // 3)
+
+
+def image_size(raw: bytes) -> tuple[int, int] | None:
+    """(width, height) read from a JPEG SOF or PNG IHDR header without decoding pixels; None if absent."""
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        if len(raw) < 24 or raw[12:16] != b"IHDR":
+            return None
+        return int.from_bytes(raw[16:20], "big"), int.from_bytes(raw[20:24], "big")
+    if not raw.startswith(b"\xff\xd8"):
+        return None
+    i = 2
+    while i + 4 <= len(raw):
+        if raw[i] != 0xFF:
+            return None
+        marker = raw[i + 1]
+        if marker == 0xFF:                                   # fill byte
+            i += 1
+            continue
+        if marker == 0x01 or 0xD0 <= marker <= 0xD7:         # markers without a length
+            i += 2
+            continue
+        if marker in (0xD9, 0xDA):                           # end of image / scan before any frame header
+            return None
+        length = int.from_bytes(raw[i + 2:i + 4], "big")
+        if length < 2:
+            return None
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            if i + 9 > len(raw):
+                return None
+            return int.from_bytes(raw[i + 7:i + 9], "big"), int.from_bytes(raw[i + 5:i + 7], "big")
+        i += 2 + length
+    return None
+
+
 def decode_frame(text) -> np.ndarray:
     """Base64 JPEG/PNG camera frame -> (224, 224, 3) uint8 RGB, resized like the training frames
-    (OpenCV decode, BGR -> RGB, INTER_LINEAR to 224 x 224)."""
+    (OpenCV decode, BGR -> RGB, INTER_LINEAR to 224 x 224). The header's dimensions are checked before
+    any pixel is decoded, so a small compressed file cannot expand into a huge image."""
     import cv2
-    if not isinstance(text, str) or len(text) > MAX_FRAME_BYTES * 4 // 3 + 4:
+    if not isinstance(text, str) or len(text) > _b64_limit(MAX_FRAME_BYTES):
         raise LiveBufferError("INVALID_FRAME_PAYLOAD")
     try:
         raw = base64.b64decode(text, validate=True)
@@ -69,8 +119,11 @@ def decode_frame(text) -> np.ndarray:
         raise LiveBufferError("INVALID_FRAME_PAYLOAD") from None
     if not (raw.startswith(b"\xff\xd8\xff") or raw.startswith(b"\x89PNG\r\n\x1a\n")):
         raise LiveBufferError("INVALID_FRAME_PAYLOAD")
+    size = image_size(raw)
+    if size is None or not (1 <= size[0] <= MAX_FRAME_SIDE and 1 <= size[1] <= MAX_FRAME_SIDE):
+        raise LiveBufferError("INVALID_FRAME_PAYLOAD")
     bgr = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
-    if bgr is None or bgr.ndim != 3 or max(bgr.shape[:2]) > MAX_FRAME_SIDE:
+    if bgr is None or bgr.ndim != 3 or bgr.shape[:2] != (size[1], size[0]):
         raise LiveBufferError("INVALID_FRAME_PAYLOAD")
     rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
     return cv2.resize(rgb, (FRAME_SIZE, FRAME_SIZE), interpolation=cv2.INTER_LINEAR)
@@ -139,19 +192,23 @@ class LiveCaptureService:
                 raise LiveBufferError("INVALID_PUSH")
             if len(audio) > MAX_AUDIO_CHUNKS_PER_PUSH or len(frames) > MAX_FRAMES_PER_PUSH:
                 raise LiveBufferError("PUSH_TOO_LARGE")
-            # decode everything before touching the buffer, so a bad push changes nothing
-            chunks = []
-            for c in audio:
-                if not isinstance(c, dict):
-                    raise LiveBufferError("INVALID_PUSH")
-                chunks.append((c.get("start"), decode_pcm16(c.get("pcm"))))
-            if sum(len(x) for _, x in chunks) > MAX_AUDIO_SECONDS_PER_PUSH * session.buffer.sample_rate:
+            if not all(isinstance(x, dict) for x in audio + frames):
+                raise LiveBufferError("INVALID_PUSH")
+            # bound the encoded sizes before decoding anything (base64 is 4 chars per 3 bytes)
+            max_samples = int(MAX_AUDIO_SECONDS_PER_PUSH * session.buffer.sample_rate)
+            pcm = [c.get("pcm") for c in audio]
+            images = [f.get("image") for f in frames]
+            if not all(isinstance(p, str) for p in pcm):
+                raise LiveBufferError("INVALID_AUDIO_PAYLOAD")
+            if sum(map(len, pcm)) > _b64_limit(2 * max_samples) + 4 * len(pcm):
                 raise LiveBufferError("PUSH_TOO_LARGE")
-            decoded = []
-            for f in frames:
-                if not isinstance(f, dict):
-                    raise LiveBufferError("INVALID_PUSH")
-                decoded.append((f.get("t"), decode_frame(f.get("image"))))
+            if not all(isinstance(i, str) and len(i) <= _b64_limit(MAX_FRAME_BYTES) for i in images):
+                raise LiveBufferError("INVALID_FRAME_PAYLOAD")
+            # decode everything before touching the buffer, so a bad push changes nothing
+            chunks = [(c.get("start"), decode_pcm16(p)) for c, p in zip(audio, pcm)]
+            if sum(len(x) for _, x in chunks) > max_samples:
+                raise LiveBufferError("PUSH_TOO_LARGE")
+            decoded = [(f.get("t"), decode_frame(i)) for f, i in zip(frames, images)]
             with session.lock:
                 for start, x in chunks:
                     session.buffer.add_audio(start, x)
@@ -165,14 +222,20 @@ class LiveCaptureService:
             return {"status": "REJECTED", "error_code": exc.code}
 
     def check(self, owner: str, payload) -> dict:
-        """Validate the current window against the backend RawMediaInput contract. No inference."""
+        """Validate the current window against the backend RawMediaInput contract. No inference.
+
+        CONTRACT_VALID means only that the shapes, dtypes and validity masks fit the contract. The achieved
+        frame times are reported separately: the contract's timestamps 0..9 are bin labels, not proof
+        that each frame was captured exactly on its second."""
         try:
             session = self._get(owner, payload)
             with session.lock:
-                media = session.buffer.to_raw_media_input()
+                snap = session.buffer.snapshot()
+                media = session.buffer.to_raw_media_input(snap)
             return {"status": "CONTRACT_VALID", "contract": "fusion.inference_contracts.RawMediaInput",
                     "waveform_shape": list(media.waveform.shape), "frames_shape": list(media.frames.shape),
-                    "predictions": None}
+                    "timing": snap["timing"], "capture": CAPTURE_PROFILE,
+                    "inference": "NOT_CONNECTED", "predictions": None}
         except LiveBufferError as exc:
             return {"status": "NOT_READY", "error_code": exc.code, "predictions": None}
         except Exception as exc:                  # contract violation from the backend validator

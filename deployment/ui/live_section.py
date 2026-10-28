@@ -8,6 +8,8 @@ The section shows buffer readiness and synchronisation diagnostics only; it neve
 from pathlib import Path
 
 from deployment.live.service import LiveCaptureService
+from deployment.live.buffer import LiveBufferError
+from deployment.live.security import request_owner
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
@@ -81,24 +83,26 @@ def live_js() -> str:
         (WEB_DIR / "live_capture.js").read_text(encoding="utf-8")
 
 
-def _owner(request) -> str:
-    """Bind live sessions to the caller's Gradio session (and login name, when present)."""
-    parts = [getattr(request, "username", None), getattr(request, "session_hash", None)]
-    return "|".join(str(p) for p in parts if p) or "anonymous"
-
-
 def build_live_section(gr, service: LiveCaptureService) -> None:
+    def dispatch(method, payload, request):
+        try:
+            owner = request_owner(request)
+        except LiveBufferError:
+            return {"status": "MODEL_NOT_READY", "predictions": None,
+                    "error_code": "LIVE_AUTHENTICATION_REQUIRED"}
+        return method(owner, payload)
+
     def live_start(payload, request: gr.Request):
-        return service.start(_owner(request), payload)
+        return dispatch(service.start, payload, request)
 
     def live_push(payload, request: gr.Request):
-        return service.push(_owner(request), payload)
+        return dispatch(service.push, payload, request)
 
     def live_check(payload, request: gr.Request):
-        return service.check(_owner(request), payload)
+        return dispatch(service.check, payload, request)
 
     def live_stop(payload, request: gr.Request):
-        return service.stop(_owner(request), payload)
+        return dispatch(service.stop, payload, request)
 
     gr.Markdown(
         "### Live verification\n"
@@ -118,5 +122,7 @@ def build_live_section(gr, service: LiveCaptureService) -> None:
     )
     gr.Markdown(
         "Your browser asks for camera and microphone access when you press Start. Audio and frames are "
-        "held in memory only for the current ten-second window and are discarded when you press Stop, "
-        "close the tab, or stay idle for 20 seconds.", elem_classes=["av-note"])
+        "held in memory for the ten-second window and the segments still filling. Stop or closing the tab "
+        "releases local devices and requests server cleanup. If that request cannot arrive, a cleanup "
+        "worker checks every second for sessions with 20 seconds without a successful update and clears them.",
+        elem_classes=["av-note"])

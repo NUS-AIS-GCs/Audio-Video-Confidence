@@ -14,6 +14,33 @@
     meter: $(".av-meter-fill"), contract: $(".av-contract"),
   };
   let cap = null;   // everything owned by one running capture, released by stop()
+  let inFlight = 0;
+  const bounded = AVTiming.withTimeout;
+  // Gradio's component promises do not expose AbortSignal. Bound both the
+  // logical wait and the number of actual outstanding calls across restarts.
+  // A stalled call blocks another capture until it settles (or the tab reloads).
+  function rpc(method, payload, onSettled) {
+    if (inFlight >= 3) return Promise.reject(new Error("LIVE_REQUEST_LIMIT"));
+    inFlight++;
+    let promise;
+    try { promise = Promise.resolve(server[method](payload)); }
+    catch (e) { promise = Promise.reject(e); }
+    function release() {
+      inFlight--;
+      if (!cap) { ui.start.disabled = inFlight > 0; ui.record.disabled = inFlight > 0; }
+    }
+    promise.then(function (r) { release(); if (onSettled) onSettled(r); }, release);
+    return bounded(promise);
+  }
+  function credentials(c) { return { session: c.session, tab_key: c.tabKey }; }
+  function releaseStream(stream) { if (stream) for (const t of stream.getTracks()) t.stop(); }
+  function capacity(c, extraSamples, extraFrames) {
+    const samples = c.audio.length + c.pendingAudio.reduce(function (n, p) { return n + p.samples.length; }, 0);
+    if (AVTiming.backlogAllowed(c.ctx.sampleRate, samples + (extraSamples || 0),
+                               c.pendingAudio.length + 1, c.frames.length + (extraFrames || 0))) return true;
+    stop("The connection cannot keep up with capture. Recording stopped; try again.", "error");
+    return false;
+  }
 
   const WORKLET = `
     class AvCapture extends AudioWorkletProcessor {
@@ -75,23 +102,30 @@
 
   // mode "record": stop by itself once ten aligned seconds are captured and checked; "rolling": run until Stop
   async function start(mode) {
-    if (cap) return;
+    if (cap || inFlight) return;
     setMessage(""); ui.contract.textContent = ""; ui.diag.innerHTML = ""; renderGrid(null);
     if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setMessage(AVTiming.permissionMessage({ name: "INSECURE_CONTEXT" }), "error"); return;
     }
     ui.start.disabled = true; ui.record.disabled = true;
     setState("Requesting camera and microphone…", "busy");
-    const c = { mode: mode, stream: null, ctx: null, node: null, session: null, timer: null, rvfc: null, raf: null,
+    const c = { mode: mode, stream: null, ctx: null, node: null, session: null, tabKey: null, timer: null, rvfc: null, raf: null,
                 pushing: false, stopped: false, clock: null, audio: AVTiming.makeAudioAccumulator(),
                 picker: AVTiming.makeFramePicker(), canvases: new Map(), frames: [], pendingAudio: [],
                 client: {}, clockTries: 0, fpsCount: 0, fpsSince: performance.now() };
     cap = c;
+    ui.stop.disabled = false;
+    c.deadline = setTimeout(function () { if (cap === c) stop("Capture time limit reached. Start a new recording.", "warn"); },
+      mode === "record" ? 60000 : 30 * 60 * 1000);
     try {
-      c.stream = await navigator.mediaDevices.getUserMedia({
+      const permission = navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
       });
+      // A late permission grant must not reopen devices after Stop or a timeout.
+      permission.then(function (stream) { if (c.stopped) releaseStream(stream); }, function () {});
+      c.stream = await bounded(permission, 30000);
+      if (c.stopped) { releaseStream(c.stream); return; }
       if (!c.stream.getAudioTracks().length) throw { name: "NO_AUDIO_TRACK" };
       if (!c.stream.getVideoTracks().length) throw { name: "NO_VIDEO_TRACK" };
       for (const t of c.stream.getTracks()) {
@@ -100,7 +134,8 @@
         t.addEventListener("unmute", function () { c.client[t.kind === "audio" ? "audio_muted" : "video_muted"] = false; });
       }
       ui.video.srcObject = c.stream;
-      await ui.video.play();
+      await bounded(ui.video.play());
+      if (c.stopped) return;
       const vs = c.stream.getVideoTracks()[0].getSettings();
       c.client.camera_width = vs.width || 0; c.client.camera_height = vs.height || 0;
 
@@ -108,20 +143,30 @@
       try { c.ctx = new AudioContext({ sampleRate: 16000 }); c.src = c.ctx.createMediaStreamSource(c.stream); }
       catch (e) { if (c.ctx) c.ctx.close(); c.ctx = new AudioContext(); c.src = c.ctx.createMediaStreamSource(c.stream); }
       const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
-      await c.ctx.audioWorklet.addModule(url);
-      URL.revokeObjectURL(url);
+      try { await bounded(c.ctx.audioWorklet.addModule(url)); }
+      finally { URL.revokeObjectURL(url); }
+      if (c.stopped) return;
       c.node = new AudioWorkletNode(c.ctx, "av-capture", { numberOfInputs: 1, numberOfOutputs: 1 });
       c.sink = c.ctx.createGain(); c.sink.gain.value = 0;   // silent sink keeps the node in the render graph
       c.src.connect(c.node); c.node.connect(c.sink); c.sink.connect(c.ctx.destination);
-      if (c.ctx.state !== "running") await c.ctx.resume();
+      if (c.ctx.state !== "running") await bounded(c.ctx.resume());
+      if (c.stopped) return;
 
-      const started = await server.live_start({ sample_rate: c.ctx.sampleRate });
+      const starting = rpc("live_start", { sample_rate: c.ctx.sampleRate }, function (r) {
+        if (c.stopped && r && r.status === "STARTED") {
+          rpc("live_stop", { session: r.session, tab_key: r.tab_key }).catch(function () {});
+        }
+      });
+      const started = await starting;
       if (c.stopped) return;
       if (!started || started.status !== "STARTED") throw { name: (started && started.error_code) || "LIVE_START_FAILED" };
       c.session = started.session;
+      c.tabKey = started.tab_key;
 
       c.node.port.onmessage = function (ev) {
+        if (c.stopped) return;
         const m = ev.data;
+        if (!capacity(c, m.samples.length, 0)) return;
         if (!c.clock) {   // the first audio sample defines the timeline origin
           try { c.clock = AVTiming.makeClock(c.ctx.getOutputTimestamp(), m.frame, c.ctx.sampleRate); }
           catch (e) {   // clock not running yet (or not supported): drop this block and retry, then give up
@@ -132,7 +177,11 @@
           watchFrames();
         }
         const idx = c.clock.frameToSample(m.frame);
-        if (!c.audio.add(idx, m.samples)) { c.pendingAudio.push(c.audio.take()); c.audio.add(idx, m.samples); }
+        if (!c.audio.add(idx, m.samples)) {
+          c.pendingAudio.push(c.audio.take());
+          if (!capacity(c, m.samples.length, 0)) return;
+          c.audio.add(idx, m.samples);
+        }
         let level = 0; for (let i = 0; i < m.samples.length; i++) level = Math.max(level, Math.abs(m.samples[i]));
         ui.meter.style.width = Math.min(100, Math.round(level * 140)) + "%";
       };
@@ -143,7 +192,8 @@
       const code = err && err.name;
       const known = ["NotAllowedError", "SecurityError", "NotFoundError", "OverconstrainedError",
                      "NotReadableError", "AbortError", "NO_AUDIO_TRACK", "NO_VIDEO_TRACK"];
-      stop(known.indexOf(code) >= 0 ? AVTiming.permissionMessage(err) : "Live capture could not start (" + (code || "error") + ").", "error");
+      if (!c.stopped && cap === c) stop(known.indexOf(code) >= 0 ? AVTiming.permissionMessage(err) :
+        "Live capture could not start (" + (code || "error") + ").", "error");
     }
   }
 
@@ -164,18 +214,21 @@
       }
       for (const due of c.picker.due(t)) {
         const cv = c.canvases.get(due); c.canvases.delete(due);
-        if (cv) c.frames.push({ t: Number(cv.dataset.t), image: cv.toDataURL("image/jpeg", JPEG_QUALITY).split(",")[1] });
+        if (cv) {
+          if (!capacity(c, 0, 1)) return;
+          c.frames.push({ t: Number(cv.dataset.t), image: cv.toDataURL("image/jpeg", JPEG_QUALITY).split(",")[1] });
+        }
       }
     };
     if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
       const loop = function (now, meta) {
         // captureTime is the camera's own timestamp (performance.now domain) where the browser has it
         onFrame(meta && Number.isFinite(meta.captureTime) ? meta.captureTime : now);
-        c.rvfc = v.requestVideoFrameCallback(loop);
+        if (!c.stopped) c.rvfc = v.requestVideoFrameCallback(loop);
       };
       c.rvfc = v.requestVideoFrameCallback(loop);
     } else {
-      const loop = function () { onFrame(performance.now()); c.raf = requestAnimationFrame(loop); };
+      const loop = function () { onFrame(performance.now()); if (!c.stopped) c.raf = requestAnimationFrame(loop); };
       c.raf = requestAnimationFrame(loop);
     }
   }
@@ -195,8 +248,8 @@
     c.client.audio_latency_ms = 1000 * ((c.ctx.baseLatency || 0) + (c.ctx.outputLatency || 0));
     c.pushing = true;
     try {
-      const d = await server.live_push({
-        session: c.session,
+      const d = await rpc("live_push", {
+        ...credentials(c),
         audio: chunks.map(function (ch) { return { start: ch.start, pcm: AVTiming.bytesToBase64(AVTiming.floatToPcm16(ch.samples)) }; }),
         frames: frames, client: c.client,
       });
@@ -229,9 +282,17 @@
 
   async function check() {
     if (!cap || !cap.session) return null;
-    const r = await server.live_check({ session: cap.session });
-    ui.contract.textContent = describeCheck(r);
-    return r;
+    const c = cap;
+    if (c.checking) return null;
+    c.checking = true; ui.check.disabled = true;
+    try {
+      const r = await rpc("live_check", credentials(c));
+      if (!c.stopped) ui.contract.textContent = describeCheck(r);
+      return r;
+    } catch (e) {
+      if (!c.stopped) stop("The window check timed out or lost its connection. Capture stopped.", "error");
+      return null;
+    } finally { c.checking = false; }
   }
 
   // Record mode: check the first complete window, then release the devices but keep the result on screen.
@@ -251,23 +312,25 @@
     if (c) {
       c.stopped = true;
       clearInterval(c.timer);
+      clearTimeout(c.deadline);
       if (c.rvfc !== null && ui.video.cancelVideoFrameCallback) ui.video.cancelVideoFrameCallback(c.rvfc);
       if (c.raf !== null) cancelAnimationFrame(c.raf);
       if (c.node) { c.node.port.onmessage = null; c.node.disconnect(); }
       if (c.sink) c.sink.disconnect();
       if (c.src) c.src.disconnect();
       if (c.ctx && c.ctx.state !== "closed") c.ctx.close();
-      if (c.stream) for (const t of c.stream.getTracks()) t.stop();
+      releaseStream(c.stream);
       c.canvases.clear(); c.frames.length = 0;
-      if (c.session) server.live_stop({ session: c.session }).catch(function () {});
+      c.audio.clear(); c.pendingAudio.length = 0;
+      if (c.session) rpc("live_stop", credentials(c)).catch(function () {});
     }
     ui.video.srcObject = null;
     ui.meter.style.width = "0%";
     // The server discards the buffer on stop, so the display must not keep showing it as ready.
     if (!keepResult) { renderGrid(null); ui.diag.innerHTML = ""; ui.contract.textContent = ""; }
-    ui.start.disabled = false; ui.record.disabled = false; ui.stop.disabled = true; ui.check.disabled = true;
+    ui.start.disabled = inFlight > 0; ui.record.disabled = inFlight > 0; ui.stop.disabled = true; ui.check.disabled = true;
     setState(message && kind === "error" ? "Stopped" : "Idle", message && kind === "error" ? "error" : "idle");
-    setMessage(message || "", kind);
+    setMessage((message || "") + (inFlight ? " Waiting for outstanding requests to finish; reload this tab if the connection stays unavailable." : ""), kind);
   }
 
   ui.start.addEventListener("click", function () { start("rolling"); });

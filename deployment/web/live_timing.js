@@ -99,6 +99,7 @@ const AVTiming = (function () {
         return chunk;
       },
       get length() { return length; },
+      clear: function () { start = null; parts = []; length = 0; },
     };
   }
 
@@ -128,8 +129,25 @@ const AVTiming = (function () {
     }
   }
 
+  const REQUEST_TIMEOUT_MS = 3000;
+  const MAX_BACKLOG_SECONDS = 1.5;  // below the server's two-second push limit
+  const MAX_PENDING_FRAMES = 4;
+  const MAX_PENDING_CHUNKS = 8;
+  function backlogAllowed(sampleRate, samples, chunks, frames) {
+    return samples <= Math.floor(sampleRate * MAX_BACKLOG_SECONDS) &&
+      chunks <= MAX_PENDING_CHUNKS && frames <= MAX_PENDING_FRAMES;
+  }
+  function withTimeout(promise, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      const timer = setTimeout(function () { reject(new Error("LIVE_REQUEST_TIMEOUT")); },
+        timeoutMs === undefined ? REQUEST_TIMEOUT_MS : timeoutMs);
+      Promise.resolve(promise).then(function (value) { clearTimeout(timer); resolve(value); },
+        function (err) { clearTimeout(timer); reject(err); });
+    });
+  }
   return { FRAME_TOLERANCE_S, makeClock, makeFramePicker, floatToPcm16, bytesToBase64,
-           makeAudioAccumulator, permissionMessage };
+           makeAudioAccumulator, permissionMessage, backlogAllowed, withTimeout,
+           REQUEST_TIMEOUT_MS, MAX_BACKLOG_SECONDS, MAX_PENDING_FRAMES };
 })();
 
 if (typeof module !== "undefined" && module.exports) { module.exports = AVTiming; }

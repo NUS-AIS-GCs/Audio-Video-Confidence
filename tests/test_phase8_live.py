@@ -21,6 +21,24 @@ from deployment.live.service import LiveCaptureService, decode_frame, decode_pcm
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def close_live_workers(monkeypatch):
+    services = []
+    original = LiveCaptureService.__init__
+    def initialize(self, *args, **kwargs):
+        original(self, *args, **kwargs)
+        services.append(self)
+    monkeypatch.setattr(LiveCaptureService, "__init__", initialize)
+    yield
+    for service in services:
+        service.close()
+
+
+def tab_key_for(service, token):
+    session = service._sessions.get(token)
+    return session.tab_key if session else "expired"
+
+
 def second_level(k):
     """Audio amplitude that encodes which timeline second a sample belongs to."""
     return 0.02 + 0.01 * (k % 50)
@@ -236,7 +254,7 @@ def run_session(svc, owner, seconds, sr=16_000, push_s=0.25, fps=30.0):
             if k not in frames_sent and k + 1 / fps <= t_end:
                 frames.append({"t": k + 0.01, "image": jpeg_b64(k % 250)})
                 frames_sent.add(k)
-        last = svc.push(owner, {"session": token, "audio": [{"start": start, "pcm": pcm_b64(x)}],
+        last = svc.push(owner, {"session": token, "tab_key": tab_key_for(svc, token), "audio": [{"start": start, "pcm": pcm_b64(x)}],
                                 "frames": frames, "client": {"video_fps": 30.0, "audio_muted": False}})
     return token, last
 
@@ -246,34 +264,35 @@ def test_service_end_to_end_reaches_ready_and_contract_check_without_predictions
     token, d = run_session(svc, "alice|s1", 12.0)
     assert d["status"] == "CAPTURING" and d["ready"] and d["segments_valid"] == 10
     assert d["client"] == {"video_fps": 30.0, "audio_muted": False}
-    r = svc.check("alice|s1", {"session": token})
+    r = svc.check("alice|s1", {"session": token, "tab_key": tab_key_for(svc, token)})
     assert r["status"] == "CONTRACT_VALID" and r["predictions"] is None
     assert r["waveform_shape"] == [1, 160_000] and r["frames_shape"] == [1, 10, 224, 224, 3]
     assert "prediction" not in json.dumps(d).lower()
-    assert svc.stop("alice|s1", {"session": token}) == {"status": "STOPPED"}
+    assert svc.stop("alice|s1", {"session": token, "tab_key": tab_key_for(svc, token)}) == {"status": "STOPPED"}
     assert svc.active_sessions == 0
 
 
 def test_check_before_ready_is_not_ready():
     svc = LiveCaptureService()
     token, _ = run_session(svc, "o", 3.0)
-    r = svc.check("o", {"session": token})
+    r = svc.check("o", {"session": token, "tab_key": tab_key_for(svc, token)})
     assert r["status"] == "NOT_READY" and r["error_code"] == "LIVE_BUFFER_NOT_READY" and r["predictions"] is None
 
 
 def test_session_belongs_to_its_owner():
     svc = LiveCaptureService()
     token = svc.start("alice|s1", {"sample_rate": 16_000})["session"]
-    assert svc.push("mallory|s2", {"session": token, "audio": [], "frames": []})["error_code"] == "LIVE_SESSION_NOT_FOUND"
-    svc.stop("mallory|s2", {"session": token})
+    assert svc.push("mallory|s2", {"session": token, "tab_key": tab_key_for(svc, token), "audio": [], "frames": []})["error_code"] == "LIVE_SESSION_NOT_FOUND"
+    svc.stop("mallory|s2", {"session": token, "tab_key": tab_key_for(svc, token)})
     assert svc.active_sessions == 1                                  # another owner cannot stop it
 
 
 def test_capacity_limit_and_restart_replaces_own_session():
     svc = LiveCaptureService(max_sessions=2)
     a1 = svc.start("a", {"sample_rate": 16_000})["session"]
-    svc.start("a", {"sample_rate": 16_000})                         # restart: old one is freed
-    assert svc.push("a", {"session": a1})["error_code"] == "LIVE_SESSION_NOT_FOUND"
+    svc.start("a", {"sample_rate": 16_000, "session": a1,
+                    "tab_key": tab_key_for(svc, a1)})             # authorized restart only
+    assert svc.push("a", {"session": a1, "tab_key": tab_key_for(svc, a1)})["error_code"] == "LIVE_SESSION_NOT_FOUND"
     svc.start("b", {"sample_rate": 16_000})
     assert svc.start("c", {"sample_rate": 16_000}) == {"status": "REJECTED", "error_code": "LIVE_CAPACITY_REACHED"}
 
@@ -285,7 +304,7 @@ def test_idle_sessions_expire_and_free_their_buffer():
     buf = svc._sessions[token].buffer
     now[0] = 25.0
     assert svc.active_sessions == 0 and not buf._seconds
-    assert svc.push("o", {"session": token})["error_code"] == "LIVE_SESSION_NOT_FOUND"
+    assert svc.push("o", {"session": token, "tab_key": tab_key_for(svc, token)})["error_code"] == "LIVE_SESSION_NOT_FOUND"
 
 
 @pytest.mark.parametrize("payload,code", [
@@ -300,7 +319,7 @@ def test_idle_sessions_expire_and_free_their_buffer():
 def test_malformed_or_oversized_pushes_are_rejected_and_change_nothing(payload, code):
     svc = LiveCaptureService()
     token = svc.start("o", {"sample_rate": 16_000})["session"]
-    r = svc.push("o", {"session": token, **payload})
+    r = svc.push("o", {"session": token, "tab_key": tab_key_for(svc, token), **payload})
     assert r == {"status": "REJECTED", "error_code": code}
     assert svc._sessions[token].buffer.counters["audio_chunks"] == 0
     assert svc._sessions[token].buffer.counters["frames"] == 0
@@ -316,7 +335,7 @@ def test_bad_start_requests_are_rejected():
 def test_client_report_keeps_only_whitelisted_fields():
     svc = LiveCaptureService()
     token = svc.start("o", {"sample_rate": 16_000})["session"]
-    d = svc.push("o", {"session": token, "client": {"video_fps": 29.97, "audio_muted": True,
+    d = svc.push("o", {"session": token, "tab_key": tab_key_for(svc, token), "client": {"video_fps": 29.97, "audio_muted": True,
                                                      "user_agent": "x", "dropped_video_frames": float("inf")}})
     assert d["client"] == {"video_fps": 29.97, "audio_muted": True}
 
@@ -326,8 +345,8 @@ def test_logs_never_include_media_payloads(caplog):
     svc = LiveCaptureService()
     pcm = pcm_b64(0.1 * np.ones(1600))
     token = svc.start("o", {"sample_rate": 16_000})["session"]
-    svc.push("o", {"session": token, "audio": [{"start": 0, "pcm": pcm}]})
-    svc.stop("o", {"session": token})
+    svc.push("o", {"session": token, "tab_key": tab_key_for(svc, token), "audio": [{"start": 0, "pcm": pcm}]})
+    svc.stop("o", {"session": token, "tab_key": tab_key_for(svc, token)})
     assert pcm[:40] not in caplog.text and token not in caplog.text
 
 
@@ -363,7 +382,7 @@ def test_frontend_widget_wiring():
     from deployment.ui.live_section import build_live_section, live_js
     js = live_js()
     for fn in ("live_start", "live_push", "live_check", "live_stop"):
-        assert f"server.{fn}(" in js
+        assert f'rpc("{fn}",' in js
     assert "getUserMedia" in js and "requestVideoFrameCallback" in js and "getTracks()" in js
     with gr.Blocks() as demo:
         build_live_section(gr, LiveCaptureService())
@@ -380,7 +399,7 @@ def test_oversized_audio_is_rejected_before_any_base64_decoding(monkeypatch):
     big = "A" * (S._b64_limit(2 * 2 * 16_000) + 8 * 4 + 4)       # just over 2 s of int16 at 16 kHz
     calls = []
     monkeypatch.setattr(S.base64, "b64decode", lambda *a, **k: calls.append(1))
-    r = svc.push("o", {"session": token, "audio": [{"start": 0, "pcm": big[: len(big) // 2]},
+    r = svc.push("o", {"session": token, "tab_key": tab_key_for(svc, token), "audio": [{"start": 0, "pcm": big[: len(big) // 2]},
                                                    {"start": 0, "pcm": big[len(big) // 2:]}]})
     assert r == {"status": "REJECTED", "error_code": "PUSH_TOO_LARGE"} and calls == []
 
@@ -391,7 +410,7 @@ def test_oversized_frame_string_is_rejected_before_decoding(monkeypatch):
     token = svc.start("o", {"sample_rate": 16_000})["session"]
     calls = []
     monkeypatch.setattr(S.base64, "b64decode", lambda *a, **k: calls.append(1))
-    r = svc.push("o", {"session": token, "frames": [{"t": 0.0, "image": "A" * (S._b64_limit(S.MAX_FRAME_BYTES) + 4)}]})
+    r = svc.push("o", {"session": token, "tab_key": tab_key_for(svc, token), "frames": [{"t": 0.0, "image": "A" * (S._b64_limit(S.MAX_FRAME_BYTES) + 4)}]})
     assert r == {"status": "REJECTED", "error_code": "INVALID_FRAME_PAYLOAD"} and calls == []
 
 
@@ -414,7 +433,7 @@ def test_huge_declared_dimensions_never_reach_the_pixel_decoder(monkeypatch):
 def test_check_reports_achieved_frame_times_and_unverified_capture_profile():
     svc = LiveCaptureService()
     token, _ = run_session(svc, "o", 12.0)
-    r = svc.check("o", {"session": token})
+    r = svc.check("o", {"session": token, "tab_key": tab_key_for(svc, token)})
     t = r["timing"]
     assert r["status"] == "CONTRACT_VALID" and r["inference"] == "NOT_CONNECTED" and r["predictions"] is None
     assert r["capture"]["encoder_compatibility"] == "NOT_VERIFIED"

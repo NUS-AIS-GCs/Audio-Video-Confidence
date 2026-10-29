@@ -78,7 +78,7 @@ class DeploymentUI:
                     pass
 
 
-def create_app(*, internal_adapter=None):
+def create_app(*, internal_adapter=None, general_research=None):
     """Build the Gradio app lazily so readiness tests need no Gradio install."""
     try:
         import gradio as gr
@@ -112,6 +112,8 @@ def create_app(*, internal_adapter=None):
     ui.upload_store = uploads
     if internal_adapter is not None:
         internal_adapter.upload_store = uploads
+    if general_research is not None:
+        general_research.upload_store = uploads
     model_ready = readiness.inference_enabled
     with gr.Blocks(
         title="AValidate",
@@ -135,6 +137,10 @@ def create_app(*, internal_adapter=None):
                 from .ui.internal_section import build_internal_section
                 with gr.Tab("Internal TRAIN demonstration"):
                     build_internal_section(gr, internal_adapter)
+            if general_research is not None:
+                from .ui.general_research_section import build_general_research_section
+                with gr.Tab("General media research — NOT APPROVED"):
+                    build_general_research_section(gr, general_research)
         gr.HTML(FOOTER_HTML)
     demo.queue(default_concurrency_limit=1, max_size=8, api_open=False)
     demo.aval_live_service = live_service
@@ -142,8 +148,8 @@ def create_app(*, internal_adapter=None):
     return demo, config
 
 
-def main(*, internal_adapter=None) -> None:
-    demo, config = create_app(internal_adapter=internal_adapter)
+def main(*, internal_adapter=None, general_research=None) -> None:
+    demo, config = create_app(internal_adapter=internal_adapter, general_research=general_research)
     port_text = os.environ.get("PORT", "7860")
     try:
         port = int(port_text)

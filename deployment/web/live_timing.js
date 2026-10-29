@@ -122,6 +122,12 @@ const AVTiming = (function () {
         return "Live capture needs a secure page (https or localhost).";
       case "NO_AUDIO_TRACK":
         return "No microphone audio was received. Check that a microphone is connected and not disabled.";
+      case "MICROPHONE_DISABLED":
+        return "Unable to verify: the selected microphone track is disabled. Enable the microphone in browser and operating-system settings, then Reset and Record again.";
+      case "MICROPHONE_TRACK_MUTED":
+        return "Unable to verify: the selected microphone track is muted or temporarily unavailable. Check the hardware mute switch and selected browser input, then Reset and Record again.";
+      case "AUDIO_CONTEXT_NOT_RUNNING":
+        return "Unable to verify: the browser audio context is suspended or interrupted. Keep this tab active, then click Reset and Record again. No microphone samples were substituted.";
       case "NO_VIDEO_TRACK":
         return "No camera video was received. Check that a camera is connected and not disabled.";
       default:

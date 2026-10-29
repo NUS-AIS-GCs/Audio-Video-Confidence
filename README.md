@@ -23,6 +23,14 @@ For the working authenticated **private product demonstration**, use
 It combines real MP4/MOV verification and signed-ticket live replay through one isolated worker.
 See [local launch and acceptance evidence](docs/product_demo.md). Public release gates remain closed.
 
+The final private candidate presents real event evidence, frozen trained Head 2
+temporal presence and E3 correspondence for upload and completed live captures.
+Use the [30 October deployment handoff](docs/deployment_handoff_20261030.md)
+for the complete source review, separate private Head 2 provisioning and SSH-only
+Linux launch requirements. The [latest diagnosis](docs/prediction_diagnosis_20261030.md)
+defines current scientific limitations; physical-speaking Case B remains unresolved.
+Earlier stage reports below describe historical candidates and do not approve this revision.
+
 ## Frontend and live capture
 
 The dark-first Gradio app has Upload verification, Live verification, How It Works and Model Information tabs.

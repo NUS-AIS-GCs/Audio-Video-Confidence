@@ -3,34 +3,41 @@
 The widget is a gr.HTML component. Its JavaScript (deployment/web/) captures and timestamps both
 modalities; its server functions call deployment.live.service.LiveCaptureService. Those calls go through
 Gradio's /component_server route, which applies the same login check as the rest of the app.
-The section shows buffer readiness and synchronisation diagnostics only; it never shows a prediction.
+The public section stays diagnostics-only. Explicit authenticated research mode
+also presents signed results from the separate isolated model worker.
 """
 from pathlib import Path
 
 from deployment.live.service import LiveCaptureService
 from deployment.live.buffer import LiveBufferError
 from deployment.live.security import request_owner
+from deployment.ui.result_sections import RESULT_CSS, ThreeHeadResults
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 LIVE_TEMPLATE = """
 <div class="av-live">
   <div class="av-live-media">
-    <video class="av-preview" muted playsinline aria-label="Camera preview"></video>
+    <video class="av-preview" autoplay muted playsinline aria-label="Camera preview"></video>
     <p class="av-note">Microphone activity</p>
     <div class="av-meter" aria-hidden="true"><div class="av-meter-fill"></div></div>
+    <p class="av-mic-status av-note" role="status">Microphone not started.</p>
     <div class="av-capture-time"><span class="av-timer">0.0 s / 10 s</span><span>Capture / diagnostics only</span></div>
     <progress class="av-progress" max="10" value="0" aria-label="Ten-second capture progress"></progress>
   </div>
   <div class="av-live-side">
     <div class="av-controls">
-      <button class="av-btn av-primary av-record" type="button">Record 10 seconds</button>
-      <button class="av-btn av-start" type="button">Start rolling capture</button>
-      <button class="av-btn av-stop" type="button" disabled>Stop</button>
+      <button class="av-btn av-primary av-record" type="button">Record 10 Seconds</button>
+      <button class="av-btn av-start" type="button" hidden>Start rolling capture</button>
+      <button class="av-btn av-stop" type="button" disabled>Cancel</button>
       <button class="av-btn av-reset" type="button">Reset</button>
     </div>
     <p class="av-state" data-kind="idle" role="status" aria-live="polite">Idle</p>
     <p class="av-msg" hidden role="alert"></p>
+    <details class="av-troubleshooting"><summary>Troubleshooting / Advanced Diagnostics</summary>
+    <h4>Microphone diagnostics</h4>
+    <p class="av-note">Track state and numeric activity only. No audio samples, device names or credentials are logged.</p>
+    <pre class="av-mic-diag" aria-label="Microphone diagnostics"></pre>
     <div class="av-grid-wrap">
       <div class="av-grid-label">Rolling buffer · last 10 seconds</div>
       <div class="av-grid">
@@ -41,6 +48,7 @@ LIVE_TEMPLATE = """
     <dl class="av-diag"></dl>
     <button class="av-btn av-check" type="button" disabled>Check window against the backend contract</button>
     <p class="av-contract av-note"></p>
+    </details>
   </div>
 </div>
 """
@@ -60,6 +68,11 @@ LIVE_CSS = """
 .av-meter { height: 6px; border-radius: 3px; background: var(--av-pending, #c9d4d8); margin-top: 8px; overflow: hidden; }
 .av-meter-fill { height: 100%; width: 0%; background: var(--av-gradient, #0e9f9a); transition: width 80ms linear; }
 .av-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+.av-mic-diag {white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:420px;overflow:auto}
+.av-live [hidden] {display:none!important}
+.av-live-side label {display:block;font-size:14px;line-height:1.7;margin:0 0 20px;color:var(--av-ink)}
+.av-troubleshooting {margin-top:22px;font-size:13px;color:var(--av-muted)}
+.av-troubleshooting summary {cursor:pointer;color:var(--av-green);padding:12px 0}
 .av-btn { font: inherit; font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 10px; cursor: pointer;
   border: 1px solid var(--av-line, #dbe5e8); background: var(--av-card, #fff); color: var(--av-ink, #10222b); }
 .av-btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -126,41 +139,39 @@ def build_live_section(gr, service: LiveCaptureService, *, research=False) -> No
         return dispatch(service.cancel, payload, request)
 
     def research_poll(payload, request: gr.Request):
-        return dispatch(service.poll, payload, request)
+        result = dispatch(service.poll, payload, request)
+        if result.get('status') == 'EXPERIMENTAL_LIVE_INPUT_NOT_APPROVED':
+            # The service verifies signed provenance, result ABI and ownership.
+            result = {**result, 'result_view': ThreeHeadResults.view(result)}
+        return result
 
     gr.Markdown(
         "### Live verification\n"
-        "Record from your webcam and microphone. AValidate aligns audio and camera frames second by second "
-        "on one shared clock and shows whether each second has both a camera frame and complete audio. "
-        "**Record 10 seconds** stops by itself once ten aligned seconds are captured and checked; "
-        "**Start rolling capture** keeps the latest ten seconds until you press Stop. "
-        + ("A completed valid capture is sent to the isolated worker for a genuine E3 result." if research else
+        "Consent below, then select **Record 10 Seconds** once. Allow camera and microphone access "
+        "when prompted and keep this tab visible. Watch the local preview and microphone activity. "
+        "Recording stops automatically and releases both devices after ten seconds. "
+        + ("All three prediction heads appear automatically after processing." if research else
            "**Predictions are disabled**: this section shows capture and sync diagnostics only."))
     template=LIVE_TEMPLATE
     functions=[live_start, live_push, live_check, live_stop]
     if research:
-        gr.Markdown('**LOCAL RESEARCH ONLY / NOT APPROVED.** Completed windows are replayed by a separate '
-            'network-isolated genuine model worker. No inference endpoint runs in this capture app. '
-            'Stop, Reset, sign-out, closing this tab or expiry invalidates pending results. '
-            'The uncalibrated correspondence score cannot prove physical sound causation.')
         template=template.replace('<div class="av-controls">',
-            '<label><input class="av-research-consent" type="checkbox"> I consent to one local research '
-            'capture and isolated model replay. Media are deleted after processing or cancellation.</label>'
-            '<div class="av-controls">').replace('</dl>', '</dl><pre class="av-research-result" '
-            'role="status" aria-live="polite"></pre>')
+            '<label><input class="av-research-consent" type="checkbox"> I consent to one ten-second camera and microphone '
+            'recording for local verification. Media are deleted after processing or cancellation.</label>'
+            '<div class="av-controls">').replace('Capture / diagnostics only','Capture / isolated replay')
+        template=template.replace('\n</div>\n','\n<div class="av-research-result" '
+            'role="status" aria-live="polite"></div>\n</div>\n')
         functions += [research_seal,research_cancel,research_poll]
     gr.HTML(
         value="",
         html_template=template,
-        css_template=LIVE_CSS,
+        css_template=LIVE_CSS + (RESULT_CSS if research else ''),
         js_on_load=live_js(research=research),
         server_functions=functions,
         elem_classes=["av-card"],
         padding=True,
     )
     gr.Markdown(
-        "Your browser asks for camera and microphone access when you press Start. Audio and frames are "
-        "held in memory for the ten-second window and the segments still filling. Stop or closing the tab "
-        "releases local devices and requests server cleanup. If that request cannot arrive, a cleanup "
-        "worker checks every second for sessions with 20 seconds without a successful update and clears them.",
+        "Cancel, Reset, leaving the tab or signing out releases devices and clears predictions. "
+        "Use Chrome or Edge on localhost. A muted or incomplete recording returns Unable to verify.",
         elem_classes=["av-note"])

@@ -1,0 +1,36 @@
+{
+  "context": "gru",
+  "dropout": 0.3,
+  "encoder_artifacts": {
+    "audio/class_names.json": "84d4763979cefd73af2248743067e1e48f368d908a701237e8d3616757921100",
+    "audio/encoder.pt": "8d1b234032a9ccff353612dc6c20982346dc2968b205b79d97303eb5e77bfb34",
+    "audio/model_card.json": "3b98967d720e7fad3de3af37f57487ebd49cf48dc357cef8dbde394a86470bfc",
+    "audio/norm_stats.json": "c0ac268380479149d759f7ba605b881d415c45a83599875d30ef492ef85295e1",
+    "audio/weights.pt": "d4a0f78403caafde2c3c39d961c9819fbae8caebaaef4b824034c678da860692",
+    "video/class_names.json": "05abcc9bba8940f745c2a6842fc268a0f25a5e689f4e1f70193aaa18d00908ac",
+    "video/model_card.json": "12f069feab94d3324f80cf9de08390a5f1a6fdaa7acdb293ada1690262925a1b",
+    "video/weights.pt": "6f1c1fc868efbd397d2ee1ca20c37800bd483911de6ef0727ac0f12871b8b2ec"
+  },
+  "files": {
+    "metadata.json": {
+      "bytes": 1434,
+      "sha256": "ed0e9f4ff76843af9f4471ae9f6d96bccfe7ccbb4ca661f02fb8ab67fc6c71d4"
+    },
+    "weights.pt": {
+      "bytes": 703161,
+      "sha256": "f957f83cf98f0f11e51217926f4519f93dcf4f04b43fa789e797e822a0dae8a7"
+    }
+  },
+  "hidden": 128,
+  "kernel": 1,
+  "limitations": [
+    "background means no annotated AVE joint event, not exhaustive proof of absence of every sound or visible source",
+    "swapped pairs and live browser domain have no new temporal ground truth",
+    "cached-export and live numerical compatibility review remains unresolved"
+  ],
+  "schema": "aval.temporal-presence-artifacts.v1",
+  "scope": "binary presence of any annotated joint AVE event in each original paired one-second bin",
+  "selection_sha256": "cf35c3a8ccbfd105312a4e24208e51c5076f3fd8c8b53726816979ea75817d5a",
+  "threshold": 0.25,
+  "version": "H2-AVE-presence-v1"
+}

@@ -236,3 +236,114 @@ def test_later_complete_window_preserves_actual_source_coordinates(store):
         assert timing['broker_tensor_comparison']['frames_exact']
         assert timing['broker_tensor_comparison']['waveform_exact']
     finally:s.close()
+
+@pytest.mark.parametrize('count,skip_first,code', [(20, False, None), (19, False, 'LIVE_RESEARCH_COMPLETE_WINDOW_REQUIRED'), (20, True, 'LIVE_WINDOW_DROPPED_FRAME')])
+def test_one_shot_seal_requires_exact_complete_window(store, count, skip_first, code):
+    service, _, owner, _ = capture_service(store)
+    try:
+        started = service.start(owner, {'sample_rate':16000, 'research':profile()})
+        creds = {k:started[k] for k in ('session', 'tab_key')}
+        response = feed(service, owner, creds, count=count, skip_first_frame=skip_first)
+        assert response['status'] == 'CAPTURING'
+        assert not response['ready']  # rolling grace has not elapsed
+        result = service.seal(owner, {**creds, 'complete':True})
+        if code:
+            assert result['status'] == 'REJECTED' and result['error_code'] == code
+            assert not list(store.root.glob('*.capture.json'))
+        else:
+            assert result['status'] == 'RESEARCH_CAPTURE_SEALED'
+            capture = store.capture(result['ticket'])
+            assert capture['source_seconds'] == list(range(10))
+            assert len(base64.b64decode(capture['pcm16'])) == 320000
+            wave, frames, timing, _ = decode_capture(capture)
+            assert wave.shape == (160000,) and frames.shape == (10,224,224,3)
+            assert timing['repairs_applied'] is False
+            assert timing['broker_tensor_comparison']['waveform_exact']
+            assert service.seal(owner, {**creds, 'complete':True})['status'] == 'REJECTED'
+    finally:
+        service.close()
+
+
+@pytest.mark.parametrize('defect', ['muted', 'gap', 'short', 'long', 'missing', 'offgrid'])
+def test_end_of_input_never_repairs_invalid_bins(defect):
+    from deployment.live.buffer import LiveBuffer
+    buffer = LiveBuffer(16000)
+    frames = [(float(k) + (.2 if defect == 'offgrid' else 0), np.ones((224,224,3),np.uint8))
+              for k in range(10) if not (defect == 'missing' and k == 9)]
+    for second in range(10):
+        count = 15999 if defect == 'gap' and second == 9 else 16000
+        if defect == 'short' and second == 9: count = 15000
+        if defect == 'long' and second == 9: count = 16001
+        samples = np.full(count, 0 if defect == 'muted' else .1, np.float32)
+        # Send each frame with its corresponding real audio packet.
+        matching = [f for f in frames if round(f[0]) == second]
+        buffer.add_push([(second * 16000, samples)], matching)
+    with pytest.raises(LiveBufferError):
+        buffer.finish_window()
+
+@pytest.mark.parametrize('amplitude,zero_second,expected', [(0, None, 'LIVE_WINDOW_MUTED_AUDIO'), (1, None, None),
+    (2000, 0, 'LIVE_WINDOW_MUTED_AUDIO'), (2000, 4, 'LIVE_WINDOW_MUTED_AUDIO'), (2000, 9, 'LIVE_WINDOW_MUTED_AUDIO')])
+def test_microphone_seal_metadata_preserves_silence_and_quiet_contract(store, amplitude, zero_second, expected):
+    service, _, owner, foreign = capture_service(store)
+    try:
+        started = service.start(owner, {'sample_rate':16000, 'research':profile()})
+        creds = {k:started[k] for k in ('session','tab_key')}
+        _, jpeg = cv2.imencode('.jpg',np.full((240,320,3),64,np.uint8))
+        image = base64.b64encode(jpeg).decode()
+        for half_second in range(20):
+            second = half_second // 2
+            value = 0 if second == zero_second else amplitude
+            pcm = base64.b64encode(np.full(8000,value,dtype='<i2').tobytes()).decode()
+            frames = [] if half_second % 2 else [{'t':float(second),'image':image,'frame_id':second*30,
+                'media_time':float(second),'timestamp_kind':'callbackNow'}]
+            result = service.push(owner,{**creds,'audio':[{'start':half_second*8000,'pcm':pcm}],
+                'frames':frames,'research_clock':{'context':1+half_second*.5,'performance':1000+half_second*500},
+                'client':{'dropped_video_frames':0}})
+            assert result['status'] == 'CAPTURING'
+        denied = service.seal(foreign,{**creds,'complete':True})
+        assert denied['status'] == 'REJECTED' and 'capture_diagnostics' not in denied
+        sealed = service.seal(owner,{**creds,'complete':True})
+        audio_stats = sealed.get('capture_diagnostics', result['capture_progress'])['audio_seconds']
+        assert [s['second'] for s in audio_stats] == list(range(10))
+        for s in audio_stats:
+            value = 0 if s['second'] == zero_second else amplitude
+            assert s['received_samples'] == 16000 and s['complete'] is True
+            assert s['nonzero_samples'] == (16000 if value else 0)
+            assert s['rms'] == abs(value)/32768 and s['peak_abs'] == abs(value)/32768
+            assert s['start_sample'] == s['second']*16000
+            assert s['end_sample_exclusive'] == (s['second']+1)*16000
+        if expected:
+            assert sealed['error_code'] == expected and sealed['predictions'] is None
+            d = sealed['capture_diagnostics']
+            assert d['accepted_audio_samples'] == 160000
+            zeros = [s['second'] for s in d['buffer']['segments'] if s['status']=='muted_audio']
+            assert zeros == ([zero_second] if zero_second is not None else list(range(10)))
+            text = json.dumps(d)
+            for private in ('pcm','image','session','tab_key','owner','cancel_key'):
+                assert private not in text
+            assert not list(store.root.glob('*.capture.json'))
+        else:
+            assert sealed['status'] == 'RESEARCH_CAPTURE_SEALED'  # 1 PCM16 unit is not rejected as quiet
+    finally:
+        service.close()
+
+def test_microphone_summary_excludes_unreceived_zero_initialized_storage(store):
+    service, _, owner, _ = capture_service(store)
+    try:
+        started=service.start(owner,{'sample_rate':16000,'research':profile()})
+        creds={k:started[k] for k in ('session','tab_key')}
+        pcm=base64.b64encode(np.full(8000,2000,dtype='<i2').tobytes()).decode()
+        r=service.push(owner,{**creds,'audio':[{'start':0,'pcm':pcm}],'frames':[],
+            'research_clock':{'context':1.,'performance':1000.},'client':{'dropped_video_frames':0}})
+        assert r['status']=='CAPTURING'
+        stats=r['capture_progress']['audio_seconds']
+        assert len(stats)==1 and stats[0]['received_samples']==8000
+        assert stats[0]['nonzero_samples']==8000 and stats[0]['complete'] is False
+        assert stats[0]['rms']==2000/32768 and stats[0]['peak_abs']==2000/32768
+        assert stats[0]['status'] is None
+        rejected=service.seal(owner,{**creds,'complete':True})
+        assert rejected['status']=='REJECTED' and rejected['error_code']=='LIVE_RESEARCH_COMPLETE_WINDOW_REQUIRED'
+        assert rejected['capture_diagnostics']['audio_seconds']==stats
+        assert not list(store.root.glob('*.capture.json'))
+    finally:
+        service.close()

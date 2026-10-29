@@ -124,6 +124,17 @@ class ResearchCaptureService(LiveCaptureService):
         """Bounded numeric/readiness metadata only: no PCM, images or capabilities."""
         sr=session.buffer.sample_rate
         accepted=evidence['next_sample']
+        audio_seconds=[]
+        for second, segment in sorted(session.buffer._seconds.items())[:10]:
+            # Mask out unreceived storage: zero-initialized buffer capacity is
+            # never counted as captured microphone input.
+            values=segment.audio[segment.have].astype(np.float64)
+            audio_seconds.append({'second':second,'start_sample':second*sr,
+                'end_sample_exclusive':(second+1)*sr,'received_samples':int(values.size),
+                'nonzero_samples':int(np.count_nonzero(values)),
+                'rms':float(np.sqrt(np.mean(values*values))) if values.size else 0.,
+                'peak_abs':float(np.max(np.abs(values))) if values.size else 0.,
+                'complete':bool(segment.have.all()),'status':segment.status})
         return {'stage':'capture_ingest','limit_kind':limit,'sample_rate':sr,
                 'accepted_audio_samples':accepted,'proposed_audio_samples':proposed_samples,
                 'accepted_audio_seconds':accepted/sr,
@@ -131,7 +142,7 @@ class ResearchCaptureService(LiveCaptureService):
                 'accepted_clock_observations':len(evidence['anchors']),
                 'max_clock_observations':MAX_CLOCK_OBSERVATIONS,
                 'server_elapsed_seconds':max(0.,self.clock()-evidence['started_monotonic']),
-                'buffer':session.buffer.diagnostics()}
+                'buffer':session.buffer.diagnostics(),'audio_seconds':audio_seconds}
 
     def _limit_rejection(self, session, committed, proposed_samples, kind):
         diagnostic=self._progress(session,committed,proposed_samples=proposed_samples,limit=kind)
@@ -201,9 +212,14 @@ class ResearchCaptureService(LiveCaptureService):
 
     def seal(self, owner, payload):
         with self._lock:
+            session = None
             try:
                 session=self._get(owner,payload);e=self.evidence[payload['session']]
                 if not self._owner_active(owner):raise LiveBufferError('LIVE_AUTHENTICATION_REQUIRED')
+                if payload.get('complete') is True:
+                    if e['next_sample'] != 10 * session.buffer.sample_rate:
+                        raise LiveBufferError('LIVE_RESEARCH_COMPLETE_WINDOW_REQUIRED')
+                    session.buffer.finish_window()
                 snap=session.buffer.snapshot()
                 seconds=snap['source_seconds']
                 if (len(seconds)!=10 or not 0<=seconds[0]<=3 or
@@ -231,7 +247,15 @@ class ResearchCaptureService(LiveCaptureService):
                 self._sessions.pop(payload['session']).buffer.clear();self.evidence.pop(payload['session'])
                 return {'status':'RESEARCH_CAPTURE_SEALED','ticket':ticket,'cancel_key':cancel,
                         'profile_id':LIVE_PROFILE,'expires_in_seconds':300,'predictions':None}
-            except LiveBufferError as exc:return {'status':'REJECTED','error_code':exc.code,'predictions':None}
+            except LiveBufferError as exc:
+                result = {'status':'REJECTED','error_code':exc.code,'predictions':None}
+                # Only an authenticated, owned session reaches this point.
+                # Return existing bounded numeric/segment metadata, never media.
+                if session is not None and session.owner == owner and self._owner_active(owner):
+                    evidence = self.evidence.get(payload.get('session'))
+                    if evidence is not None:
+                        result['capture_diagnostics'] = self._progress(session, evidence)
+                return result
             except Exception:return {'status':'REJECTED','error_code':'LIVE_RESEARCH_SEAL_FAILED','predictions':None}
 
     def cancel(self, owner, payload):

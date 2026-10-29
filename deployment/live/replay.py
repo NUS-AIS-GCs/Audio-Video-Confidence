@@ -19,6 +19,7 @@ import uuid
 import numpy as np
 
 from deployment.general_inference import GeneralResearchService, ResearchPrediction
+from deployment.event_evidence import event_evidence
 from deployment.live.buffer import LiveBufferError, FRAME_TOLERANCE_S, _resample
 from deployment.live.research_capture import LIVE_PROFILE, RESEARCH_CAPTURE_PROFILE, capture_profile, clock_report
 from deployment.live.research_store import ResearchStore, MAX_RESULT, canonical, digest
@@ -140,12 +141,14 @@ class LiveReplayAdapter:
                 waveform,frames,timing,native=decode_capture(capture)
                 self.store.check(ticket,owner)
                 score,logit,audio,visual=self.worker._forward_window(waveform,frames)
+                temporal=self.worker.temporal_prediction(audio,visual)
                 self.worker._integrity()
                 self.store.check(ticket,owner)
                 if time.monotonic()-start>JOB_TIMEOUT:raise LiveBufferError('LIVE_INFERENCE_TIMEOUT')
                 from deployment.release_gate import unapproved_prediction
                 result=ResearchPrediction(uuid.uuid4().hex,capture['capture_source_sha256'],
-                    self.profile_sha256,score,logit,float(time.monotonic()-start)).to_dict()
+                    self.profile_sha256,score,logit,float(time.monotonic()-start),
+                    event_predictions=event_evidence(audio,visual),temporal_predictions=temporal).to_dict()
                 result.update(schema=SCHEMA,status=STATUS,ticket=ticket,owner=owner,
                     live_input={'profile_id':LIVE_PROFILE,'capture_package_sha256':grant['capture_sha256'],
                         'captured_at':capture['created'],'capture_expires_at':capture['expires'],

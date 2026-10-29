@@ -1,0 +1,5 @@
+# Separate CPU training environment for Head 2; does not replace deployment locks.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.11.0+cpu
+numpy==2.2.6
+h5py==3.16.0

@@ -165,8 +165,24 @@ class LiveBuffer:
         keeps it moving if the camera stops, so a dead modality shows up as invalid seconds."""
         return max(self._audio_end_s, self._last_frame_t)
 
-    def _finalise(self) -> None:
-        upto = int(np.floor(self.watermark_s() - FINALIZE_LAG_S))
+    def finish_window(self) -> None:
+        """End of a one-shot input, after every transport packet has settled.
+
+        No future packets are expected, so the rolling delivery grace is no
+        longer needed. This changes neither timestamps nor validity checks:
+        exactly ten seconds of real audio and all ten real frames are required.
+        Previously missing/finalised bins are never repaired or reopened.
+        """
+        if self._next_sample != SEGMENTS * self.sample_rate or self._audio_end_s != SEGMENTS:
+            raise LiveBufferError('LIVE_RESEARCH_COMPLETE_WINDOW_REQUIRED')
+        self._finalise(upto=SEGMENTS)
+        if not self.ready:
+            invalid = next(self._statuses[k] for k in self.window() if self._statuses[k] != OK)
+            raise LiveBufferError('LIVE_WINDOW_' + invalid.upper())
+
+    def _finalise(self, *, upto=None) -> None:
+        if upto is None:
+            upto = int(np.floor(self.watermark_s() - FINALIZE_LAG_S))
         while self._finalised_upto < upto:
             k = self._finalised_upto
             sec = self._second(k)

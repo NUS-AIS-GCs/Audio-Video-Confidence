@@ -1,0 +1,95 @@
+{
+  "created_date": "2026-10-30",
+  "features": {
+    "audio": 256,
+    "frozen_encoders": true,
+    "normalization": "TRAIN-only feature mean/std; minimum scale 1e-6",
+    "seconds": 10,
+    "video": 512
+  },
+  "integration_acceptance": {
+    "test_each_class_recall_min": 0.6,
+    "test_macro_f1_min": 0.7,
+    "test_rule": "one evaluation after checkpoint and threshold are frozen; failures do not trigger retuning",
+    "validation_each_class_recall_min": 0.6,
+    "validation_macro_f1_min": 0.7
+  },
+  "iteration": "v3: bidirectional GRU context after MLP and local convolution failed validation; same acceptance criteria; TEST remains unopened",
+  "labels": "union of start <= second < end intervals across annotations of the same video, within its original official split",
+  "metrics": [
+    "accuracy",
+    "binary_precision",
+    "binary_recall",
+    "macro_precision",
+    "macro_recall",
+    "macro_f1",
+    "per_class_precision_recall_f1",
+    "per_second_confusion_matrix",
+    "boundary_nearest_transition_mae_seconds",
+    "missed_and_extra_boundaries"
+  ],
+  "public_release_approved": false,
+  "schema": "gc2-head2-protocol-v1",
+  "scope_limitations": [
+    "background means no annotated AVE joint event, not exhaustive proof of absence of every sound or visible source",
+    "swapped pairs and live browser domain have no new temporal ground truth",
+    "cached-export and live numerical compatibility review remains unresolved"
+  ],
+  "search": {
+    "activation": "relu",
+    "batch_clips": 128,
+    "dropout": 0.1,
+    "epochs": 40,
+    "hidden_dims": [
+      64,
+      128
+    ],
+    "learning_rate": 0.001,
+    "optimizer": "AdamW",
+    "pos_weight": "TRAIN background_seconds / positive_seconds",
+    "seed": 42,
+    "selection": "validation macro-F1 among thresholds with both class recalls >=0.60; ties closest to 0.5, then earlier epoch, then smaller hidden size; never TEST",
+    "threshold_grid": [
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.8,
+      0.85,
+      0.9,
+      0.95
+    ],
+    "variants": [
+      {
+        "context": "gru",
+        "dropout": 0.3,
+        "hidden": 64,
+        "kernel": 1,
+        "weight_decay": 0.01
+      },
+      {
+        "context": "gru",
+        "dropout": 0.3,
+        "hidden": 128,
+        "kernel": 1,
+        "weight_decay": 0.01
+      }
+    ],
+    "weight_decay": 0.001
+  },
+  "split_policy": "remove all 18 cross-split source videos from all splits; deduplicate within split by clip_id; exclude empty annotation source VWi2ENBuTbw",
+  "swapped_pairs": "UNKNOWN target; excluded from supervised training and scored evaluation",
+  "task": "binary presence of any annotated joint AVE event in each original paired one-second bin",
+  "version": "H2-AVE-presence-v1"
+}

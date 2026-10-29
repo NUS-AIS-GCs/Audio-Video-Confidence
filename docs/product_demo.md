@@ -1,5 +1,14 @@
 # Private AValidate product demonstration
 
+Final deployment handoff: [30 October combined three-head candidate](deployment_handoff_20261030.md).
+It requires the base models **and** separately provisioned `Head2` checkpoint/metadata.
+The private professor package, exact demo video paths and fresh genuine predictions
+are under `_local/professor_demo/`; those media/results are intentionally excluded from Git.
+
+For the current corrected **three-head, one-shot** app on port **7864**, use
+[local launch and five-step demonstration instructions](local_three_head_demo.md).
+The port 7862 commands and acceptance measurements below describe the earlier baseline.
+
 GC2 only. Authenticated upload and live prediction work through the original BEATs + LoRA / ResNet-18 / frozen E3 pipeline. This is a private demonstration, not independent scientific approval or public deployment. E3 threshold remains **0.009579099009671126**; ordinary public gates remain `MODEL_NOT_READY`.
 
 ## Launch and login
@@ -32,6 +41,26 @@ The broker sets its own private temp/model-placeholder paths. Only the isolated 
 Stop revokes jobs, clears media and removes the temporary model volume. Credentials remain private for restart. The signing key is separate from login credentials and is mounted read-only into the worker.
 
 ## Product behavior and executed acceptance
+
+The private upload and live result panels present three objectives. **Head 1**
+shows the actual audio/video `(10, 29)` float32 softmax tensors through top-five
+event rankings and an expandable ten-bin evidence timeline. Rankings use the
+mean of the original ten scores, without background renormalization; background
+is reported separately. Both producer class files are hash-verified and share
+28 ordered event names plus background. Audio evidence is pooled per second;
+visual evidence comes from one sampled frame per bin. These uncalibrated scores
+do not constitute a fused audible-and-visible presence decision.
+
+**Head 2** uses the separately trained and hash-verified optional
+`H2-AVE-presence-v1` artifact, with ten genuine per-second predictions and its
+own validation-selected threshold of 0.25. If that artifact is not loaded, it
+remains explicitly unavailable. Encoder argmax/background helpers are not used
+as presence predictions. See [training/evaluation and scope](temporal_presence.md).
+**Head 3** retains the genuine E3 score, original
+threshold, pairing interpretation, processing time and model version. Advanced
+diagnostics retain raw scores, shapes, source/profile hashes, actual sample
+timing and checkpoint/class-mapping provenance. Cancel/Reset/session invalidation
+clears all event and correspondence evidence together. Public gates are unchanged.
 
 Select **Verify uploaded video**, choose a complete supported 10-second H.264/AAC MP4/MOV (≤50 MiB), wait for Verify to enable, then click it. Results show classification, raw uncalibrated E3 score, frozen threshold and interpretation. Clear the current file to select another. Cancel/reset revokes the pending signed upload job and suppresses stale results.
 

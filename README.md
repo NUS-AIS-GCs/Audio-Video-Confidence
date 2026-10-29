@@ -47,3 +47,13 @@ No production inference approval, checkpoint substitution or threshold change is
 The subsequent [authentic upload/live integration handoff](docs/final_prediction_live_handoff.md)
 records private runtime provisioning, the genuine uploaded TRAIN path, live cleanup fixes and the
 remaining scientific and deployment approvals. General upload and live model predictions stay disabled.
+
+## General-media research candidate
+
+The optional `deployment.general_research_app` runs the authentic frozen models
+on a restricted general-media profile inside a no-network, read-only, resource-limited
+Linux research container. It requires existing authenticated upload ownership.
+The default app still returns `MODEL_NOT_READY`; live capture remains diagnostics-only.
+Historical parity and independent release authorization remain blocked.
+See the [DRAFT / NOT APPROVED release dossier](docs/general_upload_release_draft.md)
+for supported scope, genuine evidence, reproduction and approval requirements.

@@ -1,0 +1,4 @@
+# This catalog is byte-hashed. Preserve the committed LF bytes on Windows.
+deployment/artifact_catalog.json -text
+# Research source hashes are part of the explicit candidate runtime profile.
+deployment/general_*.py text eol=lf

@@ -1,0 +1,29 @@
+[Unit]
+Description=GC2 AValidate private authenticated product
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The existing image uses UID 1000; private bind mounts must share that UID.
+User=1000
+SupplementaryGroups=docker
+WorkingDirectory=/opt/avalidate/app
+EnvironmentFile=/etc/avalidate/product.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ExecStartPre=/opt/avalidate/venv/bin/python -B deployment/production/preflight.py --models /srv/avalidate/models --private-dir /var/lib/avalidate/private --image ${AVAL_PRODUCT_IMAGE}
+ExecStart=/opt/avalidate/venv/bin/python -B -m deployment.run_product_demo --models /srv/avalidate/models --private-dir /var/lib/avalidate/private --port 7862 --image ${AVAL_PRODUCT_IMAGE} --no-build
+ExecStop=/opt/avalidate/venv/bin/python -B -m deployment.run_product_demo --private-dir /var/lib/avalidate/private --stop
+TimeoutStartSec=360
+TimeoutStopSec=120
+KillMode=mixed
+# Recover forced-termination/orphaned workers explicitly; never create duplicate workers.
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

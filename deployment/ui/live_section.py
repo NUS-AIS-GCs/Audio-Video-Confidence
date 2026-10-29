@@ -134,7 +134,8 @@ def build_live_section(gr, service: LiveCaptureService, *, research=False) -> No
         "on one shared clock and shows whether each second has both a camera frame and complete audio. "
         "**Record 10 seconds** stops by itself once ten aligned seconds are captured and checked; "
         "**Start rolling capture** keeps the latest ten seconds until you press Stop. "
-        "**Predictions are disabled**: this section shows capture and sync diagnostics only.")
+        + ("A completed valid capture is sent to the isolated worker for a genuine E3 result." if research else
+           "**Predictions are disabled**: this section shows capture and sync diagnostics only."))
     template=LIVE_TEMPLATE
     functions=[live_start, live_push, live_check, live_stop]
     if research:

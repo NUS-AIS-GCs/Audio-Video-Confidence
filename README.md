@@ -18,6 +18,11 @@ the app authentication protects its UI and direct event/API requests.
 
 The research Streamlit application remains `app.py` and is not the Docker entry point.
 
+For the working authenticated **private product demonstration**, use
+`python -m deployment.run_product_demo --models PATH_TO_VERIFIED_MODELS --port 7862`.
+It combines real MP4/MOV verification and signed-ticket live replay through one isolated worker.
+See [local launch and acceptance evidence](docs/product_demo.md). Public release gates remain closed.
+
 ## Frontend and live capture
 
 The dark-first Gradio app has Upload verification, Live verification, How It Works and Model Information tabs.

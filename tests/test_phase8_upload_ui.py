@@ -49,6 +49,8 @@ def test_real_gradio_wiring_keeps_private_submit_and_clears_stale_results():
     change = next(d for d in deps if getattr(d.fn, '__name__', '') == "clear")
     assert click.api_visibility == "private" and click.concurrency_limit == 1
     assert change.api_visibility == "private"
+    reset = next(dep for dep in demo.get_config_file()['dependencies'] if dep['id'] == change._id)
+    assert reset['targets'] == [(click.inputs[0]._id, 'change')]
     assert click.trigger_mode == "once"
     assert any(d.cancels for d in deps)  # file changes cancel in-flight generator results
     assert isinstance(click.inputs[0], gr.Textbox) and change.inputs == []

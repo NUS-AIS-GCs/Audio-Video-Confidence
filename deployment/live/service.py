@@ -290,10 +290,12 @@ class LiveCaptureService:
             snap = session.buffer.snapshot()
             media = session.buffer.to_raw_media_input(snap)
             session.last_seen = self.clock()
+            from deployment.release_gate import unapproved_prediction
             return {"status": "CONTRACT_VALID", "contract": "fusion.inference_contracts.RawMediaInput",
                     "waveform_shape": list(media.waveform.shape), "frames_shape": list(media.frames.shape),
                     "timing": snap["timing"], "capture": CAPTURE_PROFILE,
-                    "inference": "NOT_CONNECTED", "predictions": None}
+                    "inference": "NOT_CONNECTED", "predictions": None,
+                    "prediction_readiness": unapproved_prediction("live")}
         except LiveBufferError as exc:
             return {"status": "NOT_READY", "error_code": exc.code, "predictions": None}
         except Exception as exc:                  # contract violation from the backend validator

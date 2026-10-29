@@ -1,4 +1,4 @@
-"""Separate Hugging Face Docker Space UI for readiness and safe upload admission."""
+"""Authenticated readiness UI: public predictions are disabled pending release review."""
 from __future__ import annotations
 
 import logging
@@ -78,7 +78,7 @@ class DeploymentUI:
                     pass
 
 
-def create_app():
+def create_app(*, internal_adapter=None):
     """Build the Gradio app lazily so readiness tests need no Gradio install."""
     try:
         import gradio as gr
@@ -103,13 +103,15 @@ def create_app():
     from .live.service import LiveCaptureService
     from .uploads import UploadStore
     from .ui.live_section import build_live_section
-    from .ui.theme import ABOUT_MD, BRAND_CSS, header_html
+    from .ui.theme import ABOUT_MD, BRAND_CSS, FOOTER_HTML, HOW_HTML, READINESS_HTML, header_html
     from .ui.upload_section import build_upload_section
 
     live_service = LiveCaptureService()
     uploads = UploadStore(os.environ.get("GRADIO_TEMP_DIR", tempfile.gettempdir()), config.max_upload_bytes)
     live_service.upload_store = uploads
     ui.upload_store = uploads
+    if internal_adapter is not None:
+        internal_adapter.upload_store = uploads
     model_ready = readiness.inference_enabled
     with gr.Blocks(
         title="AValidate",
@@ -117,11 +119,7 @@ def create_app():
     ) as demo:
         gr.HTML(header_html(model_ready), head=f"<style>{BRAND_CSS}</style>")
         if not model_ready:
-            gr.Markdown(
-                "**MODEL_NOT_READY. Real inference is disabled.** This interface does not show example, "
-                "annotation-derived, or synthetic predictions. A successful upload check is not an "
-                "audio-video verification result. Live capture shows buffer and sync diagnostics only; "
-                "predictions are disabled.")
+            gr.HTML(READINESS_HTML)
             with gr.Accordion(f"Startup status: {len(categories)} items not ready", open=False):
                 gr.Markdown("\n".join(f"- `{item}`" for item in categories))
         with gr.Tabs():
@@ -129,20 +127,23 @@ def create_app():
                 build_upload_section(gr, ui)
             with gr.Tab("Live verification"):
                 build_live_section(gr, live_service)
-            with gr.Tab("About"):
+            with gr.Tab("How It Works"):
+                gr.HTML(HOW_HTML)
+            with gr.Tab("Model Information"):
                 gr.Markdown(ABOUT_MD)
-                gr.Markdown(
-                    "A future inference path must use the verified Phase 6 contracts after exact encoder "
-                    "artifacts, decoder behavior, and raw-to-TRAIN export parity are independently verified. "
-                    "Scores, if later enabled, remain uncalibrated; no per-second output is inferred from attention.")
+            if internal_adapter is not None:
+                from .ui.internal_section import build_internal_section
+                with gr.Tab("Internal TRAIN demonstration"):
+                    build_internal_section(gr, internal_adapter)
+        gr.HTML(FOOTER_HTML)
     demo.queue(default_concurrency_limit=1, max_size=8, api_open=False)
     demo.aval_live_service = live_service
     demo.aval_upload_store = uploads
     return demo, config
 
 
-def main() -> None:
-    demo, config = create_app()
+def main(*, internal_adapter=None) -> None:
+    demo, config = create_app(internal_adapter=internal_adapter)
     port_text = os.environ.get("PORT", "7860")
     try:
         port = int(port_text)
@@ -152,6 +153,7 @@ def main() -> None:
         raise RuntimeError("INVALID_SERVER_PORT") from None
     blocked = [str(config.model_root)]
     from .live.security import live_app_kwargs
+    from .ui.theme import BRAND_CSS, LOGIN_CSS, LOGIN_HTML
     stopping = False
 
     def stop(_signal, _frame):
@@ -167,6 +169,11 @@ def main() -> None:
             server_port=port,
             share=False,
             auth=config.gradio_auth,
+            # The pinned login view does not load Blocks' custom CSS. Keep its
+            # native form/registry and brand only the trusted server HTML slot.
+            auth_message=f"<style>{BRAND_CSS}{LOGIN_CSS}</style>{LOGIN_HTML}",
+            css=BRAND_CSS,
+            footer_links=[],
             show_error=False,
             enable_monitoring=False,
             max_file_size=config.max_upload_bytes,

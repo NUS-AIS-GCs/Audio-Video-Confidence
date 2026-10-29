@@ -7,7 +7,7 @@ sdk: docker
 app_port: 7860
 ---
 
-# AValidate deployment foundation
+# AValidate
 
 This repository contains a Docker/Gradio readiness interface. Model inference is disabled until
 the exact trained encoder artifacts, decoder contract, and raw-to-TRAIN export parity have been
@@ -20,7 +20,7 @@ The research Streamlit application remains `app.py` and is not the Docker entry 
 
 ## Frontend and live capture
 
-The Gradio app has a branded layout with Upload verification, Live verification and About tabs.
+The dark-first Gradio app has Upload verification, Live verification, How It Works and Model Information tabs.
 The Upload tab provides a local video preview, Verify progress and admission/result cards.
 The Live tab records ten aligned seconds from a webcam and microphone (or keeps a rolling
 ten-second buffer) and shows capture and
@@ -36,3 +36,14 @@ disabled. No Hugging Face deployment has been performed.
 Stage 2H upload ownership, transport limits, expiry and container changes are documented in
 [docs/phase8_stage2h_upload_hardening.md](docs/phase8_stage2h_upload_hardening.md).
 Use that report for the current upload security assessment; Stage 2G records the earlier audit.
+
+The current UI, authenticated internal TRAIN demonstration, typed prediction adapter, validation
+evidence and manual release procedure are documented in
+[docs/prediction_ui_release.md](docs/prediction_ui_release.md). The default Docker entry point remains
+the gated application. `python -m deployment.internal_app` is a separate experimental entry point
+requiring the existing authorized, hash-bound TRAIN artifacts; it cannot enable public predictions.
+No production inference approval, checkpoint substitution or threshold change is introduced.
+
+The subsequent [authentic upload/live integration handoff](docs/final_prediction_live_handoff.md)
+records private runtime provisioning, the genuine uploaded TRAIN path, live cleanup fixes and the
+remaining scientific and deployment approvals. General upload and live model predictions stay disabled.

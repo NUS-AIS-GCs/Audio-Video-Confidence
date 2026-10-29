@@ -12,9 +12,13 @@
     video: $(".av-preview"), start: $(".av-start"), record: $(".av-record"), stop: $(".av-stop"), check: $(".av-check"),
     state: $(".av-state"), msg: $(".av-msg"), grid: $(".av-grid"), diag: $(".av-diag"),
     meter: $(".av-meter-fill"), contract: $(".av-contract"),
+    timer: $(".av-timer"), progress: $(".av-progress"), reset: $(".av-reset"),
   };
   let cap = null;   // everything owned by one running capture, released by stop()
   let inFlight = 0;
+  let cleanupTimer = null;
+  const CLEANUP_MESSAGE = "Releasing capture resources...";
+  const WAITING_MESSAGE = "Waiting for outstanding requests to finish; reload this tab if the connection stays unavailable.";
   const bounded = AVTiming.withTimeout;
   // Gradio's component promises do not expose AbortSignal. Bound both the
   // logical wait and the number of actual outstanding calls across restarts.
@@ -22,14 +26,29 @@
   function rpc(method, payload, onSettled) {
     if (inFlight >= 3) return Promise.reject(new Error("LIVE_REQUEST_LIMIT"));
     inFlight++;
+    if (!cap) { ui.start.disabled = true; ui.record.disabled = true; }
     let promise;
     try { promise = Promise.resolve(server[method](payload)); }
     catch (e) { promise = Promise.reject(e); }
     function release() {
       inFlight--;
-      if (!cap) { ui.start.disabled = inFlight > 0; ui.record.disabled = inFlight > 0; }
+      if (!cap) {
+        ui.start.disabled = inFlight > 0; ui.record.disabled = inFlight > 0;
+        if (inFlight === 0) {
+          clearTimeout(cleanupTimer); cleanupTimer = null;
+          for (const suffix of [CLEANUP_MESSAGE, WAITING_MESSAGE]) {
+            if (ui.msg.textContent.endsWith(suffix)) {
+              setMessage(ui.msg.textContent.slice(0, -suffix.length).trim(), ui.msg.dataset.kind);
+            }
+          }
+        }
+      }
     }
-    promise.then(function (r) { release(); if (onSettled) onSettled(r); }, release);
+    promise.then(function (r) {
+      // A late start may create another cleanup RPC. Keep the controls disabled
+      // until that request also settles, with no briefly enabled restart window.
+      try { if (onSettled) onSettled(r); } finally { release(); }
+    }, release);
     return bounded(promise);
   }
   function credentials(c) { return { session: c.session, tab_key: c.tabKey }; }
@@ -103,7 +122,11 @@
   // mode "record": stop by itself once ten aligned seconds are captured and checked; "rolling": run until Stop
   async function start(mode) {
     if (cap || inFlight) return;
+    clearTimeout(cleanupTimer); cleanupTimer = null;
     setMessage(""); ui.contract.textContent = ""; ui.diag.innerHTML = ""; renderGrid(null);
+    if (document.hidden) {
+      setMessage("Return to this tab before starting camera and microphone capture.", "warn"); return;
+    }
     if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setMessage(AVTiming.permissionMessage({ name: "INSECURE_CONTEXT" }), "error"); return;
     }
@@ -129,7 +152,10 @@
       if (!c.stream.getAudioTracks().length) throw { name: "NO_AUDIO_TRACK" };
       if (!c.stream.getVideoTracks().length) throw { name: "NO_VIDEO_TRACK" };
       for (const t of c.stream.getTracks()) {
-        t.addEventListener("ended", function () { c.client.track_ended = true; stop("A camera or microphone was disconnected. Capture stopped.", "error"); });
+        t.addEventListener("ended", function () {
+          if (c.stopped || cap !== c) return;
+          c.client.track_ended = true; stop("A camera or microphone was disconnected. Capture stopped.", "error");
+        });
         t.addEventListener("mute", function () { c.client[t.kind === "audio" ? "audio_muted" : "video_muted"] = true; });
         t.addEventListener("unmute", function () { c.client[t.kind === "audio" ? "audio_muted" : "video_muted"] = false; });
       }
@@ -151,6 +177,11 @@
       c.src.connect(c.node); c.node.connect(c.sink); c.sink.connect(c.ctx.destination);
       if (c.ctx.state !== "running") await bounded(c.ctx.resume());
       if (c.stopped) return;
+      if (c.ctx.addEventListener) c.ctx.addEventListener("statechange", function () {
+        if (!c.stopped && cap === c && c.ctx.state !== "running") {
+          stop("The audio clock stopped. Start a new recording to synchronize again.", "error");
+        }
+      });
 
       const starting = rpc("live_start", { sample_rate: c.ctx.sampleRate }, function (r) {
         if (c.stopped && r && r.status === "STARTED") {
@@ -177,6 +208,9 @@
           watchFrames();
         }
         const idx = c.clock.frameToSample(m.frame);
+        const elapsed = Math.max(0, (idx + m.samples.length) / c.ctx.sampleRate);
+        if (ui.timer) ui.timer.textContent = (c.mode === "record" ? Math.min(10, elapsed) : elapsed).toFixed(1) + " s / 10 s";
+        if (ui.progress) ui.progress.value = Math.min(10, elapsed);
         if (!c.audio.add(idx, m.samples)) {
           c.pendingAudio.push(c.audio.take());
           if (!capacity(c, m.samples.length, 0)) return;
@@ -277,7 +311,8 @@
       ", frames " + r.frames_shape.join("×") + ". Camera frames were captured within " + t.max_abs_frame_offset_ms +
       " ms of their second (limit " + t.frame_tolerance_ms + " ms)" +
       (t.clipped_samples ? "; " + t.clipped_samples + " audio samples were clipped" : "") +
-      ". Live capture is not yet verified against the encoders' training input, and no prediction is produced.";
+      ". Live capture is not yet verified against the encoders' training input. " +
+      "Model verification is unavailable until independent live-input and release approval; predictions remain null.";
   }
 
   async function check() {
@@ -327,17 +362,31 @@
     ui.video.srcObject = null;
     ui.meter.style.width = "0%";
     // The server discards the buffer on stop, so the display must not keep showing it as ready.
-    if (!keepResult) { renderGrid(null); ui.diag.innerHTML = ""; ui.contract.textContent = ""; }
+    if (!keepResult) {
+      renderGrid(null); ui.diag.innerHTML = ""; ui.contract.textContent = "";
+      if (ui.timer) ui.timer.textContent = "0.0 s / 10 s";
+      if (ui.progress) ui.progress.value = 0;
+    }
     ui.start.disabled = inFlight > 0; ui.record.disabled = inFlight > 0; ui.stop.disabled = true; ui.check.disabled = true;
     setState(message && kind === "error" ? "Stopped" : "Idle", message && kind === "error" ? "error" : "idle");
-    setMessage((message || "") + (inFlight ? " Waiting for outstanding requests to finish; reload this tab if the connection stays unavailable." : ""), kind);
+    clearTimeout(cleanupTimer); cleanupTimer = null;
+    setMessage((message || "") + (inFlight ? " " + CLEANUP_MESSAGE : ""), kind);
+    if (inFlight) cleanupTimer = setTimeout(function () {
+      if (!cap && inFlight) {
+        setMessage((message || "") + " " + WAITING_MESSAGE, kind || "warn");
+      }
+    }, 1000);
   }
 
   ui.start.addEventListener("click", function () { start("rolling"); });
   ui.record.addEventListener("click", function () { start("record"); });
   ui.stop.addEventListener("click", function () { stop(); });
+  if (ui.reset) ui.reset.addEventListener("click", function () { stop(); });
   ui.check.addEventListener("click", check);
   window.addEventListener("pagehide", function () { stop(); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden && cap) stop("Capture stopped because the tab is in the background. Start a new recording on return.", "warn");
+  });
   renderGrid(null);
   stop();
 })();

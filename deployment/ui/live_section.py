@@ -17,13 +17,17 @@ LIVE_TEMPLATE = """
 <div class="av-live">
   <div class="av-live-media">
     <video class="av-preview" muted playsinline aria-label="Camera preview"></video>
+    <p class="av-note">Microphone activity</p>
     <div class="av-meter" aria-hidden="true"><div class="av-meter-fill"></div></div>
+    <div class="av-capture-time"><span class="av-timer">0.0 s / 10 s</span><span>Capture / diagnostics only</span></div>
+    <progress class="av-progress" max="10" value="0" aria-label="Ten-second capture progress"></progress>
   </div>
   <div class="av-live-side">
     <div class="av-controls">
       <button class="av-btn av-primary av-record" type="button">Record 10 seconds</button>
       <button class="av-btn av-start" type="button">Start rolling capture</button>
       <button class="av-btn av-stop" type="button" disabled>Stop</button>
+      <button class="av-btn av-reset" type="button">Reset</button>
     </div>
     <p class="av-state" data-kind="idle" role="status" aria-live="polite">Idle</p>
     <p class="av-msg" hidden role="alert"></p>
@@ -45,6 +49,12 @@ LIVE_CSS = """
 .av-live { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; }
 @media (max-width: 860px) { .av-live { grid-template-columns: 1fr; } }
 .av-live-media { position: relative; }
+.av-capture-time { display:flex; justify-content:space-between; gap:12px; margin-top:14px;
+  color:var(--av-muted); font-size:12px; font-variant-numeric:tabular-nums; }
+.av-progress { width:100%; height:6px; margin-top:8px; accent-color:var(--av-teal); }
+.av-progress::-webkit-progress-bar { background:var(--av-pending); border-radius:4px; }
+.av-progress::-webkit-progress-value { background:var(--av-teal); border-radius:4px; }
+.av-btn:focus-visible { outline:3px solid #73d7ff; outline-offset:4px; }
 .av-preview { width: 100%; aspect-ratio: 4 / 3; background: #0b161b; border-radius: 14px; object-fit: cover;
   transform: scaleX(-1); display: block; }
 .av-meter { height: 6px; border-radius: 3px; background: var(--av-pending, #c9d4d8); margin-top: 8px; overflow: hidden; }
@@ -53,13 +63,14 @@ LIVE_CSS = """
 .av-btn { font: inherit; font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 10px; cursor: pointer;
   border: 1px solid var(--av-line, #dbe5e8); background: var(--av-card, #fff); color: var(--av-ink, #10222b); }
 .av-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.av-primary { background: var(--av-gradient, #0e9f9a); color: #fff; border: none; }
+.av-primary { background: var(--av-gradient, #0e9f9a); color: #071724; border: none; }
 .av-check { margin-top: 12px; width: 100%; }
 .av-state { margin: 12px 0 4px; font-weight: 700; color: var(--av-ink, #10222b); }
 .av-state[data-kind="ok"] { color: var(--av-ok, #2fbf71); }
 .av-state[data-kind="error"] { color: var(--av-bad, #e0484f); }
 .av-msg { margin: 4px 0; font-size: 13px; padding: 8px 10px; border-radius: 8px; background: rgba(224,72,79,.1); color: var(--av-bad, #e0484f); }
-.av-msg[data-kind="warn"] { background: rgba(227,160,8,.12); color: #a57400; }
+.av-msg[data-kind="warn"] { background: rgba(227,160,8,.12); color: #f4cc83; }
+.av-msg[data-kind="info"] { background: rgba(99,230,212,.08); color: #bcece8; }
 .av-grid-wrap { margin-top: 10px; }
 .av-grid-label { font-size: 12px; font-weight: 600; color: var(--av-muted, #5b6b73); text-transform: uppercase; letter-spacing: .06em; }
 .av-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: 6px; }
@@ -75,6 +86,7 @@ LIVE_CSS = """
 .av-diag { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 14px 0 0; font-size: 13px; }
 .av-diag dt { color: var(--av-muted, #5b6b73); }
 .av-diag dd { margin: 0; color: var(--av-ink, #10222b); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .av-meter-fill, .av-grid i { transition: none; } }
 """
 
 

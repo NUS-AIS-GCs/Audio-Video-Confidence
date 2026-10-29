@@ -32,9 +32,9 @@ UPLOAD_MESSAGES = {
     "UPLOAD_VALIDATION_FAILED": ("File could not be checked", "Try again. If it keeps failing, re-export the clip."),
     "AUTHENTICATION_CONFIGURATION_REQUIRED": ("Uploads are switched off", "The server's sign-in is not configured."),
     "DECODER_DEPENDENCY_MISSING": ("Checker unavailable", "The server's media decoder is not installed."),
-    "RAW_INFERENCE_GATE_CLOSED": ("Upload accepted, verification not available yet",
-                                  "The file passed every upload check. Audio-video verification stays off until "
-                                  "the trained models are connected and verified, so no result is shown."),
+    "RAW_INFERENCE_GATE_CLOSED": ("Model verification unavailable",
+                                  "Media admission succeeded. Inference is not enabled: preprocessing, numerical "
+                                  "compatibility and release approval are pending. No prediction is shown."),
 }
 _FALLBACK = ("Upload not accepted", "The file did not pass the upload checks.")
 
@@ -49,15 +49,19 @@ UPLOAD_CSS = """
 .av-result[data-kind="empty"] p { font-style: italic; }
 """
 
-EMPTY_CARD = ('<div class="av-result" data-kind="empty"><p>No check yet. Choose a file and press '
-              'Verify.</p></div>')
+EMPTY_CARD = ('<div class="av-result" data-kind="empty" role="status" aria-live="polite">'
+              '<h4>Ready for your clip</h4><p>Choose a file and press Verify to check media admission.</p></div>')
 LOADING_CARD = ('<div class="av-result" role="status" aria-live="polite" aria-busy="true">'
                 '<h4>Checking upload…</h4><p>Validating the file. Predictions remain disabled.</p></div>')
-E3_PENDING = ('<div class="av-result" data-kind="not_ready"><h4>E3 correspondence result</h4>'
-              '<p>Unavailable · predictions disabled. An approved correspondence result will appear here '
-              'after the model release gates pass.</p>'
-              '<dl><dt>Pairing decision</dt><dd>Unavailable</dd>'
-              '<dt>Uncalibrated correspondence score</dt><dd>Unavailable</dd></dl></div>')
+E3_PENDING = '''<section aria-label="E3 correspondence result"><div class="av-empty-score">
+<div class="av-score" aria-label="No correspondence score">— —</div>
+<p class="av-note">Correspondence score unavailable</p><div class="av-score-track"></div>
+<p class="av-note">No model prediction has been produced</p></div>
+<dl class="av-meta"><div><dt>Pairing decision</dt><dd>Unavailable</dd></div>
+<div><dt>Primary model</dt><dd>Frozen E3 · concat + MLP</dd></div>
+<div><dt>Processing</dt><dd>Media admission only</dd></div><div><dt>Release status</dt><dd>Validation blocked</dd></div></dl>
+<p class="av-note">An approved result would describe original-like or audio-substituted-like pairing.
+A raw sigmoid score is not a calibrated probability or proof of a visible sound source.</p></section>'''
 
 
 def public_admission_result(result) -> dict:
@@ -111,39 +115,39 @@ def build_upload_section(gr, ui) -> None:
 
     gr.HTML(f"<style>{UPLOAD_CSS}</style>", padding=False)
     limit_mb = f"{ui.config.max_upload_bytes / (1024 * 1024):.3g}"
-    gr.Markdown("### Upload verification\nChoose one recorded **10-second clip with sound** "
-                f"(MP4, MOV or MKV with H.264 + AAC, or WebM with VP9 + Opus; up to {limit_mb} MB). "
-                "Preview the clip, then press **Verify**. This checks admission only: "
-                "**MODEL_NOT_READY — predictions remain disabled**. "
-                "Uploads are removed after checking; select the file again to run another check.")
-    gr.Markdown("Uploads not checked expire within five minutes, with cleanup checked every second. "
-                "The preview uses your local file; server-side media downloads are disabled.")
-    uploaded = gr.File(
-        label="One 10-second audio-video file (MP4, MOV, MKV, or WebM)",
-        file_count="single",
-        file_types=[".mp4", ".mov", ".mkv", ".webm"],
-        type="filepath",
-        elem_id="av-upload-source",
-    )
-    # Never pass a FileData object through backend preprocessing: Gradio moves
-    # file inputs into a shared cache even when preprocess=False. The frontend
-    # forwards only our opaque handle into a scalar input. Server ownership
-    # checks remain authoritative if this hidden value is forged.
-    handle = gr.Textbox(visible=False)
-    uploaded.change(fn=None, inputs=uploaded, outputs=handle,
-                    js="(file) => file && typeof file.path === 'string' ? file.path : ''", queue=False)
-    gr.HTML(value="", html_template=(
-        f'<div class="av-upload-preview" data-limit="{ui.config.max_upload_bytes}">'
-        '<video controls playsinline preload="metadata" hidden aria-label="Uploaded video preview"></video>'
-        '<p class="av-preview-note av-note" role="status"></p></div>'),
-        css_template=".av-upload-preview video { width: 100%; max-height: 360px; border-radius: 12px; background: #0b161b; }",
-        js_on_load=(Path(__file__).resolve().parent.parent / "web/upload_preview.js").read_text(encoding="utf-8"),
-        padding=False)
-    submit = gr.Button("Verify (predictions disabled)", variant="primary")
-    card = gr.HTML(EMPTY_CARD, padding=False)
-    with gr.Accordion("Technical details", open=False):
-        output = gr.JSON(label="Admission status; predictions are disabled")
-    gr.HTML(E3_PENDING, padding=False)
+    with gr.Row(equal_height=True):
+        with gr.Column(scale=6, min_width=300, elem_classes=["av-panel"]):
+            gr.HTML('<h2 class="av-section-title"><span class="av-step">01 / INPUT</span>Upload your clip</h2>'
+                    f'<p class="av-note">Ten seconds. One audio track, one video track. Up to {limit_mb} MiB.</p>')
+            uploaded = gr.File(
+                label="One 10-second audio-video file (MP4, MOV, MKV, or WebM)",
+                file_count="single",
+                file_types=[".mp4", ".mov", ".mkv", ".webm"],
+                type="filepath",
+                elem_id="av-upload-source",
+            )
+            # Pass only an opaque handle: FileData preprocessing would move media
+            # into Gradio's shared cache. Server ownership checks remain authoritative.
+            handle = gr.Textbox(visible=False)
+            uploaded.change(fn=None, inputs=uploaded, outputs=handle,
+                            js="(file) => file && typeof file.path === 'string' ? file.path : ''", queue=False)
+            gr.HTML(value="", html_template=(
+                f'<div class="av-upload-preview" data-limit="{ui.config.max_upload_bytes}">'
+                '<video controls playsinline preload="metadata" hidden aria-label="Uploaded video preview"></video>'
+                '<p class="av-preview-note av-note" role="status"></p></div>'),
+                css_template=".av-upload-preview video { width: 100%; max-height: 360px; border-radius: 12px; background: #0b161b; }",
+                js_on_load=(Path(__file__).resolve().parent.parent / "web/upload_preview.js").read_text(encoding="utf-8"),
+                padding=False)
+            gr.Markdown("MP4 / MOV / MKV · H.264 + AAC &nbsp; | &nbsp; WebM · VP9 + Opus", elem_classes=["av-note"])
+            submit = gr.Button("Verify clip · admission check", variant="primary")
+            gr.Markdown("Local preview. Uploads are removed after checking; abandoned uploads expire within "
+                        "five minutes (cleanup every second). Select the file again for another check.", elem_classes=["av-note"])
+        with gr.Column(scale=5, min_width=300, elem_classes=["av-panel"]):
+            gr.HTML('<h2 class="av-section-title"><span class="av-step">02 / ANALYSIS</span>Verification result</h2>')
+            card = gr.HTML(EMPTY_CARD, padding=False)
+            gr.HTML(E3_PENDING, padding=False)
+            with gr.Accordion("Backend response", open=False):
+                output = gr.JSON(label="Admission status; predictions are disabled")
     verify = submit.click(
         fn=check,
         inputs=handle,
@@ -154,5 +158,7 @@ def build_upload_section(gr, ui) -> None:
         show_progress="full",
         trigger_mode="once",
     )
-    uploaded.change(fn=clear, inputs=None, outputs=[card, output, submit], api_name=None,
+    # Reset from the scalar handle, never from the File event's FileData payload.
+    # The Stage 2H transport must continue rejecting FileData before cache traversal.
+    handle.change(fn=clear, inputs=None, outputs=[card, output, submit], api_name=None,
                     api_visibility="private", queue=False, cancels=[verify])

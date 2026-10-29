@@ -1,7 +1,8 @@
 """Bounded single-file transport and login-owned, expiring upload handles.
 
 Never delegate multipart storage or media serving to Gradio's shared cache.
-Only the existing admission validator opens a leased file; no model is invoked.
+Only authenticated consumers open leases. Public uploads remain admission-only;
+the separate internal adapter additionally restricts inference to permitted TRAIN bytes.
 """
 from __future__ import annotations
 

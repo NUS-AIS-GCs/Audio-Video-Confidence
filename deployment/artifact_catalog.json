@@ -1,0 +1,78 @@
+{
+  "schema": "aval.original-runtime-artifacts.v1",
+  "acquisition_manifest_sha256": "65b9c6573ba6fef65ead16da1aeb1e7803fe5ee57c6328a3b89f485f2306187e",
+  "files": {
+    "A2/best.pt": {
+      "sha256": "0adf31d64d49e1917bca1ee4835aa2e40c506a41f7b7260a1dd1f68b62ec9c12",
+      "bytes": 8725384
+    },
+    "A2/checkpoint_integrity.json": {
+      "sha256": "5f4f65cbf75f4833f97cd7ba53491b3f4b78ec5be9dd088579bdacc8a616b2da",
+      "bytes": 279
+    },
+    "A2/checkpoint_metadata.json": {
+      "sha256": "aadd9c73e7675249f8192912656ca624aa6d77d50b10cea3f29a1968cce8d460",
+      "bytes": 6459
+    },
+    "A2/frozen_operating_point.json": {
+      "sha256": "16994e04c6a8421ec8bc22c1fac33691a4a0228ba544f6e57b0730f98c95b384",
+      "bytes": 458
+    },
+    "E3/best.pt": {
+      "sha256": "e7df0de86d873005728c142c3bd31729df803f4cc805110d82e375fb5d695925",
+      "bytes": 6706435
+    },
+    "E3/checkpoint_integrity.json": {
+      "sha256": "771aa0972cf67082107aabf43c9119ab5a1f2840d85c10d12524f3944319166d",
+      "bytes": 281
+    },
+    "E3/checkpoint_metadata.json": {
+      "sha256": "fd6abe3f0e62f09e19c096f82b6516195a2c8dba93cd3d534e7f88fcfec48e58",
+      "bytes": 7369
+    },
+    "E3/frozen_operating_point.json": {
+      "sha256": "706db41c19e6df2cc39c3c769a17bd4346f745d3f91723bbb58171c81ee8a9ad",
+      "bytes": 457
+    },
+    "audio/class_names.json": {
+      "sha256": "84d4763979cefd73af2248743067e1e48f368d908a701237e8d3616757921100",
+      "bytes": 472
+    },
+    "audio/encoder.pt": {
+      "sha256": "8d1b234032a9ccff353612dc6c20982346dc2968b205b79d97303eb5e77bfb34",
+      "bytes": 361499833
+    },
+    "audio/environment.json": {
+      "sha256": "bb53adcedf93ec9c04d293c7f39b0389561830f5eef8cb9741d239e437e1f2da",
+      "bytes": 255
+    },
+    "audio/model_card.json": {
+      "sha256": "3b98967d720e7fad3de3af37f57487ebd49cf48dc357cef8dbde394a86470bfc",
+      "bytes": 1198
+    },
+    "audio/norm_stats.json": {
+      "sha256": "c0ac268380479149d759f7ba605b881d415c45a83599875d30ef492ef85295e1",
+      "bytes": 32759
+    },
+    "audio/weights.pt": {
+      "sha256": "d4a0f78403caafde2c3c39d961c9819fbae8caebaaef4b824034c678da860692",
+      "bytes": 2013703
+    },
+    "video/class_names.json": {
+      "sha256": "05abcc9bba8940f745c2a6842fc268a0f25a5e689f4e1f70193aaa18d00908ac",
+      "bytes": 531
+    },
+    "video/environment.json": {
+      "sha256": "323b5e3f9477db336f7ba2f5568a94089ae5fea1d8172001d926dcbc39bd790a",
+      "bytes": 183
+    },
+    "video/model_card.json": {
+      "sha256": "12f069feab94d3324f80cf9de08390a5f1a6fdaa7acdb293ada1690262925a1b",
+      "bytes": 809
+    },
+    "video/weights.pt": {
+      "sha256": "6f1c1fc868efbd397d2ee1ca20c37800bd483911de6ef0727ac0f12871b8b2ec",
+      "bytes": 44839691
+    }
+  }
+}

@@ -315,6 +315,8 @@ class UploadAdmissionTests(unittest.TestCase):
             "HTML": Component,
             "Tabs": Component,
             "Tab": Component,
+            "Row": Component,
+            "Column": Component,
             "Accordion": Component,
             "Blocks": Blocks,
             "Markdown": staticmethod(lambda *_args, **_kwargs: None),
@@ -363,7 +365,7 @@ class UploadAdmissionTests(unittest.TestCase):
 
         # Parameters from Gradio's tagged 6.30.0 Blocks.launch signature.
         pinned_launch_parameters = {
-            "inline", "inbrowser", "share", "debug", "max_threads", "auth",
+            "inline", "inbrowser", "share", "debug", "max_threads", "auth", "css",
             "auth_message", "prevent_thread_lock", "show_error", "server_name",
             "server_port", "height", "width", "favicon_path", "ssl_keyfile",
             "ssl_certfile", "ssl_keyfile_password", "ssl_verify", "quiet",

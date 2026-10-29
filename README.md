@@ -57,3 +57,13 @@ The default app still returns `MODEL_NOT_READY`; live capture remains diagnostic
 Historical parity and independent release authorization remain blocked.
 See the [DRAFT / NOT APPROVED release dossier](docs/general_upload_release_draft.md)
 for supported scope, genuine evidence, reproduction and approval requirements.
+
+## Local live-input research
+
+The optional `deployment.live_research_app` captures authenticated, consented windows
+on localhost and exchanges short-lived signed tickets with a separate offline model
+worker. The worker retains the existing no-network Linux sandbox requirements.
+The default Upload and Live prediction gates remain closed. See the
+[DRAFT live-input compatibility dossier](docs/live_input_compatibility_draft.md)
+for genuine fixture results, the unsuccessful single physical attempt, numerical
+differences, security tests and independent approval requirements.

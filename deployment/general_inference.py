@@ -146,14 +146,7 @@ class GeneralResearchService:
         try:
             self._integrity()
             decoded = self.decoder.decode(content,filename)
-            audio = self.audio.predict_waveform(decoded.waveform)
-            visual = self.video.predict_frames(decoded.frames)
-            with torch.no_grad(),torch.autocast('cpu',enabled=False):
-                z = self.fusion._model(torch.from_numpy(audio.embeddings)[None],
-                    torch.from_numpy(visual.embeddings)[None],torch.ones(1,10,dtype=torch.bool)).logits
-            if z.shape != (1,1) or z.dtype != torch.float32 or not torch.isfinite(z).all():
-                raise DeploymentError('GENERAL_INVALID_FUSION_OUTPUT')
-            logit = float(z[0,0]); score = float(np.exp(-np.logaddexp(0.,-np.float64(logit))))
+            score, logit, audio, visual = self._forward_window(decoded.waveform, decoded.frames)
             self._integrity()
             result = ResearchPrediction(uuid.uuid4().hex,decoded.source_sha256,self.profile_sha256,
                 score,logit,float(time.perf_counter()-start)).to_dict()
@@ -171,6 +164,24 @@ class GeneralResearchService:
             return error('GENERAL_INFERENCE_FAILED')
         finally:
             self._lock.release()
+
+    def _forward_window(self, waveform, frames):
+        """Shared authentic forward; caller owns the worker lock and integrity checks.
+
+        This grants no admission, ownership, timeline or public-release authority.
+        Both offline live replay and compressed-media research use these same
+        already-loaded verified encoders and the frozen E3 model.
+        """
+        audio = self.audio.predict_waveform(waveform)
+        visual = self.video.predict_frames(frames)
+        with torch.no_grad(), torch.autocast('cpu', enabled=False):
+            z = self.fusion._model(torch.from_numpy(audio.embeddings)[None],
+                torch.from_numpy(visual.embeddings)[None], torch.ones(1,10,dtype=torch.bool)).logits
+        if z.shape != (1,1) or z.dtype != torch.float32 or not torch.isfinite(z).all():
+            raise DeploymentError('GENERAL_INVALID_FUSION_OUTPUT')
+        logit = float(z[0,0])
+        score = float(np.exp(-np.logaddexp(0.,-np.float64(logit))))
+        return score, logit, audio, visual
 
     def submit_owned(self, handle, request):
         from deployment.uploads import UploadError

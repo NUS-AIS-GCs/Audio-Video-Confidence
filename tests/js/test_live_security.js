@@ -17,12 +17,17 @@ function browser(options = {}) {
       click: () => handlers.click(), handlers, append() {}};
   }
   for (const name of ['preview','start','record','stop','reset','timer','progress','check','state','msg','grid','diag','meter-fill','contract']) node('.av-' + name);
+  if (options.research) {
+    node('.av-research-consent').checked = options.consent !== false;
+    node('.av-research-result');
+  }
   const video = nodes['.av-preview']; video.play = async () => {}; video.videoWidth = 640; video.videoHeight = 480;
   video.cancelVideoFrameCallback = () => {}; video.requestVideoFrameCallback = () => 1;
   const tracks = ['audio','video'].map(kind => ({kind, handlers:{}, stopped: false, stop() {this.stopped = true;},
-    addEventListener(n,f) {this.handlers[n]=f;}, getSettings: () => ({width: 640, height: 480})}));
+    addEventListener(n,f) {this.handlers[n]=f;}, getSettings: () => ({width: 640, height: 480,
+      sampleRate:48000,channelCount:2,echoCancellation:false,noiseSuppression:false,autoGainControl:false})}));
   const stream = {getTracks: () => tracks, getAudioTracks: () => [tracks[0]], getVideoTracks: () => [tracks[1]]};
-  let worklet, interval; const stops = [], pushes = [];
+  let worklet, interval, permissionCalls=0; const stops = [], pushes = [], cancels=[];
   class Context {
     constructor() {this.sampleRate = 16000; this.state = 'running'; this.audioWorklet = {addModule: async () => {}};}
     createMediaStreamSource() {return {connect() {}, disconnect() {}};}
@@ -34,13 +39,17 @@ function browser(options = {}) {
     live_start: options.start || (async () => ({status: 'STARTED', session: 'server-session', tab_key: 'server-tab-key'})),
     live_push: data => {pushes.push(data); return options.push ? options.push(data) : Promise.resolve({status:'CAPTURING'});},
     live_stop: data => {stops.push(data); return options.stop ? options.stop(data) : Promise.resolve({status:'STOPPED'});},
-    live_check: options.check || (async () => ({status:'NOT_READY', error_code:'LIVE_BUFFER_NOT_READY'}))
+    live_check: options.check || (async () => ({status:'NOT_READY', error_code:'LIVE_BUFFER_NOT_READY'})),
+    research_seal: options.seal || (async()=>({status:'RESEARCH_CAPTURE_SEALED',ticket:'a'.repeat(64),cancel_key:'b'.repeat(64)})),
+    research_poll: options.poll || (async()=>({status:'RESEARCH_REPLAY_PENDING',predictions:null})),
+    research_cancel: async data=>{cancels.push(data);return {status:'RESEARCH_CAPTURE_REVOKED'};}
   };
   const context = {
     AVTiming: {...T, withTimeout: (p, ms) => T.withTimeout(p, ms === 30000 ? 100 : 10)},
     element: {querySelector: selector => nodes[selector]}, server,
     window: {isSecureContext: true, addEventListener() {}},
-    navigator: {mediaDevices: {getUserMedia: () => options.permission || Promise.resolve(stream)}},
+    navigator: {mediaDevices: {getUserMedia: () => {permissionCalls++;return options.permission || Promise.resolve(stream);}}},
+    AVLiveResearch:require('../../deployment/web/live_research_result.js'),
     AudioContext: Context,
     AudioWorkletNode: class {constructor() {this.port = {}; worklet = this;} connect() {} disconnect() {}},
     URL: {createObjectURL: () => 'blob:unit', revokeObjectURL() {}}, Blob,
@@ -53,7 +62,7 @@ function browser(options = {}) {
     clearTimeout, cancelAnimationFrame() {}, requestAnimationFrame: () => 1,
   };
   vm.runInNewContext(fs.readFileSync(path.join(web, 'live_capture.js'), 'utf8'), context);
-  return {nodes, tracks, stream, stops, pushes,
+  return {nodes, tracks, stream, stops, pushes, cancels, get permissionCalls(){return permissionCalls;},
     background: () => {context.document.hidden=true;context.document.listeners.visibilitychange();},
     start: () => nodes['.av-start'].click(), stop: () => nodes['.av-stop'].click(),
     record: () => nodes['.av-record'].click(),
@@ -72,6 +81,52 @@ test('stalled push times out, stops devices and includes both server capabilitie
   assert.equal(b.stops[0].session, 'server-session');
   assert.equal(b.nodes['.av-start'].disabled, true);
   b.start(); await tick(); assert.equal(b.pushes.length, 1); // no new capture while the real call is stalled
+});
+
+test('research consent is required before activating even fake devices', async () => {
+  const b=browser({research:true,consent:false});
+  await b.record();
+  assert.equal(b.permissionCalls,0);
+  assert.match(b.nodes['.av-msg'].textContent,/Consent is required/);
+});
+
+test('a research seal arriving after Stop is revoked and never displayed', async () => {
+  let finish;
+  const b=browser({research:true,push:async()=>({status:'CAPTURING',ready:true}),
+    seal:()=>new Promise(resolve=>{finish=resolve;})});
+  b.record();await tick();b.audio(0);const pending=b.push();await new Promise(r=>setTimeout(r,1));
+  b.stop();finish({status:'RESEARCH_CAPTURE_SEALED',ticket:'a'.repeat(64),cancel_key:'b'.repeat(64)});
+  await pending;await tick();
+  assert.equal(b.cancels.length,1);
+  assert.equal(b.nodes['.av-research-result'].textContent,'');
+  assert.ok(b.tracks.every(t=>t.stopped));
+});
+
+test('Reset cancels sealed offline replay and clears its display', async () => {
+  const b=browser({research:true,push:async()=>({status:'CAPTURING',ready:true})});
+  b.record();await tick();b.audio(0);await b.push();
+  assert.equal(b.nodes['.av-research-consent'].checked,false);
+  b.nodes['.av-reset'].click();await tick();
+  assert.equal(b.cancels.length,1);
+  assert.equal(b.nodes['.av-research-result'].textContent,'');
+  assert.ok(b.tracks.every(t=>t.stopped));
+});
+
+test('research limit rejection preserves sanitized counters after device cleanup', async () => {
+  const diagnostic={stage:'capture_ingest',limit_kind:'audio_samples',sample_rate:16000,
+    accepted_audio_samples:208000,proposed_audio_samples:212000,max_audio_samples:208000,
+    buffer:{ready:false,segments_valid:0}};
+  const b=browser({research:true,push:async()=>({status:'REJECTED',
+    error_code:'LIVE_RESEARCH_CAPTURE_TOO_LONG',capture_diagnostics:diagnostic})});
+  b.record();await tick();b.audio(0);await b.push();
+  assert.ok(b.tracks.every(t=>t.stopped));
+  assert.equal(b.nodes['.av-preview'].srcObject,null);
+  assert.match(b.nodes['.av-contract'].textContent,/audio_samples/);
+  assert.match(b.nodes['.av-contract'].textContent,/208000/);
+  assert.equal(b.nodes['.av-research-result'].textContent,'');
+  assert.equal(b.stops.length,1);
+  b.nodes['.av-reset'].click();
+  assert.equal(b.nodes['.av-contract'].textContent,'');
 });
 
 test('normal pending stop shows cleanup state without a stalled warning, then clears', async () => {

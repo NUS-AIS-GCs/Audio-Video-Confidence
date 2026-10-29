@@ -70,7 +70,7 @@ class LiveBuffer:
             raise LiveBufferError("UNSUPPORTED_SAMPLE_RATE")
 
     # ---- input --------------------------------------------------------------------------------
-    def add_audio(self, start: int, samples: np.ndarray) -> None:
+    def add_audio(self, start: int, samples: np.ndarray, *, _finalize=True) -> None:
         """start: index of samples[0] on the shared timeline; samples: float32 mono in [-1, 1]."""
         if type(start) is not int or start < 0:
             raise LiveBufferError("INVALID_AUDIO_START")
@@ -108,9 +108,10 @@ class LiveBuffer:
             sec.audio[lo - k * sr: hi - k * sr] = samples[lo - start: hi - start]
             sec.have[lo - k * sr: hi - k * sr] = True
         self._audio_end_s = max(self._audio_end_s, end / sr)
-        self._finalise()
+        if _finalize:
+            self._finalise()
 
-    def add_frame(self, t: float, rgb224: np.ndarray) -> None:
+    def add_frame(self, t: float, rgb224: np.ndarray, *, _finalize=True) -> None:
         """t: capture time in seconds on the shared timeline; rgb224: (224, 224, 3) uint8 RGB."""
         if type(t) not in (int, float) or not np.isfinite(t) or t < -FRAME_TOLERANCE_S:
             raise LiveBufferError("INVALID_FRAME_TIME")
@@ -134,6 +135,22 @@ class LiveBuffer:
             if sec.frame is None or abs(offset) < abs(sec.frame_offset_s):
                 self.counters["replaced_frames"] += sec.frame is not None
                 sec.frame, sec.frame_offset_s = rgb224, offset
+        if _finalize:
+            self._finalise()
+
+    def add_push(self, chunks, frames) -> None:
+        """Ingest one already-bounded transport batch before finalizing bins.
+
+        The service calls this on its transaction copy. Validate every sample
+        and frame with the existing checks; only finalization is deferred until
+        both modalities in this same packet have been applied. Previously an
+        audio watermark could finalize a bin before its co-delivered frame was
+        inserted. Frames late relative to an earlier packet remain late.
+        """
+        for start, samples in chunks:
+            self.add_audio(start, samples, _finalize=False)
+        for timestamp, rgb in frames:
+            self.add_frame(timestamp, rgb, _finalize=False)
         self._finalise()
 
     # ---- state --------------------------------------------------------------------------------

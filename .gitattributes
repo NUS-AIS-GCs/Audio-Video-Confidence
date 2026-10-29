@@ -2,3 +2,5 @@
 deployment/artifact_catalog.json -text
 # Research source hashes are part of the explicit candidate runtime profile.
 deployment/general_*.py text eol=lf
+deployment/live/research_*.py text eol=lf
+deployment/live/replay.py text eol=lf

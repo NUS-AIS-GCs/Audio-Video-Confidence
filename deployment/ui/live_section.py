@@ -90,15 +90,18 @@ LIVE_CSS = """
 """
 
 
-def live_js() -> str:
-    return (WEB_DIR / "live_timing.js").read_text(encoding="utf-8") + "\n" + \
+def live_js(*, research=False) -> str:
+    return ((WEB_DIR / "live_research_result.js").read_text(encoding="utf-8") + "\n" if research else "") + \
+        (WEB_DIR / "live_timing.js").read_text(encoding="utf-8") + "\n" + \
         (WEB_DIR / "live_capture.js").read_text(encoding="utf-8")
 
 
-def build_live_section(gr, service: LiveCaptureService) -> None:
+def build_live_section(gr, service: LiveCaptureService, *, research=False) -> None:
     def dispatch(method, payload, request):
         try:
             owner = request_owner(request)
+            if research:
+                service.bind_auth(request.app)
         except LiveBufferError:
             return {"status": "MODEL_NOT_READY", "predictions": None,
                     "error_code": "LIVE_AUTHENTICATION_REQUIRED"}
@@ -116,6 +119,15 @@ def build_live_section(gr, service: LiveCaptureService) -> None:
     def live_stop(payload, request: gr.Request):
         return dispatch(service.stop, payload, request)
 
+    def research_seal(payload, request: gr.Request):
+        return dispatch(service.seal, payload, request)
+
+    def research_cancel(payload, request: gr.Request):
+        return dispatch(service.cancel, payload, request)
+
+    def research_poll(payload, request: gr.Request):
+        return dispatch(service.poll, payload, request)
+
     gr.Markdown(
         "### Live verification\n"
         "Record from your webcam and microphone. AValidate aligns audio and camera frames second by second "
@@ -123,12 +135,25 @@ def build_live_section(gr, service: LiveCaptureService) -> None:
         "**Record 10 seconds** stops by itself once ten aligned seconds are captured and checked; "
         "**Start rolling capture** keeps the latest ten seconds until you press Stop. "
         "**Predictions are disabled**: this section shows capture and sync diagnostics only.")
+    template=LIVE_TEMPLATE
+    functions=[live_start, live_push, live_check, live_stop]
+    if research:
+        gr.Markdown('**LOCAL RESEARCH ONLY / NOT APPROVED.** Completed windows are replayed by a separate '
+            'network-isolated genuine model worker. No inference endpoint runs in this capture app. '
+            'Stop, Reset, sign-out, closing this tab or expiry invalidates pending results. '
+            'The uncalibrated correspondence score cannot prove physical sound causation.')
+        template=template.replace('<div class="av-controls">',
+            '<label><input class="av-research-consent" type="checkbox"> I consent to one local research '
+            'capture and isolated model replay. Media are deleted after processing or cancellation.</label>'
+            '<div class="av-controls">').replace('</dl>', '</dl><pre class="av-research-result" '
+            'role="status" aria-live="polite"></pre>')
+        functions += [research_seal,research_cancel,research_poll]
     gr.HTML(
         value="",
-        html_template=LIVE_TEMPLATE,
+        html_template=template,
         css_template=LIVE_CSS,
-        js_on_load=live_js(),
-        server_functions=[live_start, live_push, live_check, live_stop],
+        js_on_load=live_js(research=research),
+        server_functions=functions,
         elem_classes=["av-card"],
         padding=True,
     )

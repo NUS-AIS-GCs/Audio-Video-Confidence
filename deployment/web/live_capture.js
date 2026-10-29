@@ -13,7 +13,11 @@
     state: $(".av-state"), msg: $(".av-msg"), grid: $(".av-grid"), diag: $(".av-diag"),
     meter: $(".av-meter-fill"), contract: $(".av-contract"),
     timer: $(".av-timer"), progress: $(".av-progress"), reset: $(".av-reset"),
+    consent: $(".av-research-consent"), researchResult: $(".av-research-result"),
   };
+  const research = !!ui.consent;
+  let researchJob = null;
+  if (research) ui.start.hidden = true; // research exports only the first completed window
   let cap = null;   // everything owned by one running capture, released by stop()
   let inFlight = 0;
   let cleanupTimer = null;
@@ -122,6 +126,13 @@
   // mode "record": stop by itself once ten aligned seconds are captured and checked; "rolling": run until Stop
   async function start(mode) {
     if (cap || inFlight) return;
+    if (research && !ui.consent.checked) {
+      setMessage("Consent is required before local research capture and replay.", "warn"); return;
+    }
+    if (research && !("requestVideoFrameCallback" in HTMLVideoElement.prototype)) {
+      setMessage("Research capture requires actual video-frame callback metadata.", "error"); return;
+    }
+    if (researchJob) { await cancelResearch(); if (inFlight) return; }
     clearTimeout(cleanupTimer); cleanupTimer = null;
     setMessage(""); ui.contract.textContent = ""; ui.diag.innerHTML = ""; renderGrid(null);
     if (document.hidden) {
@@ -172,7 +183,9 @@
       try { await bounded(c.ctx.audioWorklet.addModule(url)); }
       finally { URL.revokeObjectURL(url); }
       if (c.stopped) return;
-      c.node = new AudioWorkletNode(c.ctx, "av-capture", { numberOfInputs: 1, numberOfOutputs: 1 });
+      c.node = new AudioWorkletNode(c.ctx, "av-capture", research ?
+        { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: "explicit", channelInterpretation: "speakers" } :
+        { numberOfInputs: 1, numberOfOutputs: 1 });
       c.sink = c.ctx.createGain(); c.sink.gain.value = 0;   // silent sink keeps the node in the render graph
       c.src.connect(c.node); c.node.connect(c.sink); c.sink.connect(c.ctx.destination);
       if (c.ctx.state !== "running") await bounded(c.ctx.resume());
@@ -183,7 +196,18 @@
         }
       });
 
-      const starting = rpc("live_start", { sample_rate: c.ctx.sampleRate }, function (r) {
+      const startPayload = { sample_rate: c.ctx.sampleRate };
+      if (research) {
+        const settings = c.stream.getAudioTracks()[0].getSettings();
+        startPayload.research = {consent: true, context_rate:c.ctx.sampleRate,
+          device_rate:settings.sampleRate || 0, device_channels:settings.channelCount || 0,
+          echo_cancellation:settings.echoCancellation, noise_suppression:settings.noiseSuppression,
+          auto_gain_control:settings.autoGainControl, mono_mix:"explicit-speakers-mono",
+          browser_resampler:"AudioContext-implementation-defined"};
+        const quality = ui.video.getVideoPlaybackQuality && ui.video.getVideoPlaybackQuality();
+        c.initialDropped = quality ? quality.droppedVideoFrames : 0;
+      }
+      const starting = rpc("live_start", startPayload, function (r) {
         if (c.stopped && r && r.status === "STARTED") {
           rpc("live_stop", { session: r.session, tab_key: r.tab_key }).catch(function () {});
         }
@@ -233,7 +257,7 @@
 
   function watchFrames() {
     const c = cap, v = ui.video;
-    const onFrame = function (perfMs) {
+    const onFrame = function (perfMs, meta) {
       if (c.stopped) return;
       const t = c.clock.perfToTimeline(perfMs);
       c.fpsCount++;
@@ -245,19 +269,27 @@
         cv.width = Math.round(v.videoWidth * scale); cv.height = Math.round(v.videoHeight * scale);
         cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height);
         cv.dataset.t = String(t);
+        if (research) {
+          cv.dataset.frameId = String(meta && meta.presentedFrames);
+          cv.dataset.mediaTime = String(meta && meta.mediaTime);
+          cv.dataset.timestampKind = meta && Number.isFinite(meta.captureTime) ? "captureTime" : "callbackNow";
+        }
       }
       for (const due of c.picker.due(t)) {
         const cv = c.canvases.get(due); c.canvases.delete(due);
         if (cv) {
           if (!capacity(c, 0, 1)) return;
-          c.frames.push({ t: Number(cv.dataset.t), image: cv.toDataURL("image/jpeg", JPEG_QUALITY).split(",")[1] });
+          const frame = { t: Number(cv.dataset.t), image: cv.toDataURL("image/jpeg", JPEG_QUALITY).split(",")[1] };
+          if (research) Object.assign(frame,{frame_id:Number(cv.dataset.frameId),media_time:Number(cv.dataset.mediaTime),
+                                           timestamp_kind:cv.dataset.timestampKind});
+          c.frames.push(frame);
         }
       }
     };
     if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
       const loop = function (now, meta) {
         // captureTime is the camera's own timestamp (performance.now domain) where the browser has it
-        onFrame(meta && Number.isFinite(meta.captureTime) ? meta.captureTime : now);
+        onFrame(meta && Number.isFinite(meta.captureTime) ? meta.captureTime : now, meta);
         if (!c.stopped) c.rvfc = v.requestVideoFrameCallback(loop);
       };
       c.rvfc = v.requestVideoFrameCallback(loop);
@@ -278,18 +310,28 @@
     c.client.video_fps = 1000 * c.fpsCount / Math.max(1, now - c.fpsSince);
     c.fpsCount = 0; c.fpsSince = now;
     const q = ui.video.getVideoPlaybackQuality && ui.video.getVideoPlaybackQuality();
-    if (q) c.client.dropped_video_frames = q.droppedVideoFrames;
+    if (q) c.client.dropped_video_frames = q.droppedVideoFrames - (research ? c.initialDropped : 0);
     c.client.audio_latency_ms = 1000 * ((c.ctx.baseLatency || 0) + (c.ctx.outputLatency || 0));
     c.pushing = true;
     try {
-      const d = await rpc("live_push", {
+      const payload = {
         ...credentials(c),
         audio: chunks.map(function (ch) { return { start: ch.start, pcm: AVTiming.bytesToBase64(AVTiming.floatToPcm16(ch.samples)) }; }),
         frames: frames, client: c.client,
-      });
+      };
+      if (research) {
+        const a = c.ctx.getOutputTimestamp();
+        payload.research_clock = {context:a.contextTime,performance:a.performanceTime};
+      }
+      const d = await rpc("live_push", payload);
       if (c.stopped) return;
       if (!d || d.status !== "CAPTURING") {
-        stop("Capture stopped by the server (" + ((d && d.error_code) || "no response") + ").", "error"); return;
+        const diagnostic = research && d && d.capture_diagnostics;
+        stop("Capture stopped by the server (" + ((d && d.error_code) || "no response") + ").", "error");
+        // Keep only the server's sanitized final counters after cleanup. The
+        // ordinary timer/grid reset must not erase the reason for rejection.
+        if (diagnostic) ui.contract.textContent = "Capture diagnostic: " + JSON.stringify(diagnostic);
+        return;
       }
       renderGrid(d); renderDiag(d);
       if (c.mode === "record" && d.ready) { await finishRecording(c); return; }
@@ -332,6 +374,40 @@
 
   // Record mode: check the first complete window, then release the devices but keep the result on screen.
   async function finishRecording(c) {
+    if (research) {
+      let sealed;
+      try {
+        sealed = await rpc("research_seal",credentials(c),function (r) {
+          if (c.stopped && r && r.status === "RESEARCH_CAPTURE_SEALED") {
+            rpc("research_cancel",{ticket:r.ticket,cancel_key:r.cancel_key}).catch(function () {});
+          }
+        });
+      } catch (e) { if (!c.stopped) stop("Research export failed or timed out.","error"); return; }
+      if (c.stopped || cap !== c) return;
+      if (!sealed || sealed.status !== "RESEARCH_CAPTURE_SEALED") {
+        stop("Research window rejected ("+((sealed && sealed.error_code)||"error")+").","error");return;
+      }
+      researchJob={ticket:sealed.ticket,cancel_key:sealed.cancel_key,timer:null};
+      ui.consent.checked=false;
+      stop("Window sealed. Waiting for the offline isolated replay worker.","info",true);
+      ui.stop.disabled=false;
+      const job=researchJob;
+      async function pollResearch() {
+        if (researchJob!==job) return;
+        try {
+          const r=await rpc("research_poll",{ticket:job.ticket,cancel_key:job.cancel_key});
+          if (researchJob!==job) return;
+          if (r && r.status === "EXPERIMENTAL_LIVE_INPUT_NOT_APPROVED" && r.production_predictions_enabled === false) {
+            AVLiveResearch.render(ui.researchResult,r);
+          } else if (!r || r.status !== "RESEARCH_REPLAY_PENDING") {
+            stop("Research result unavailable, expired or revoked.","warn");return;
+          }
+        } catch (e) { if (researchJob===job) stop("Research session lost; result cleared.","error");return; }
+        if (researchJob===job) job.timer=setTimeout(pollResearch,1000);
+      }
+      job.timer=setTimeout(pollResearch,500);
+      return;
+    }
     let r = null;
     try { r = await check(); } catch (e) { r = null; }
     if (c.stopped) return;
@@ -343,6 +419,7 @@
   // Releases devices, audio graph, timers and the server session. Safe to call more than once.
   // keepResult leaves the last grid, diagnostics and check on screen (a finished recording).
   function stop(message, kind, keepResult) {
+    if (research && !keepResult) cancelResearch();
     const c = cap; cap = null;
     if (c) {
       c.stopped = true;
@@ -376,6 +453,15 @@
         setMessage((message || "") + " " + WAITING_MESSAGE, kind || "warn");
       }
     }, 1000);
+  }
+
+  async function cancelResearch() {
+    const job=researchJob;researchJob=null;
+    if (ui.researchResult) ui.researchResult.textContent="";
+    if (job) {
+      clearTimeout(job.timer);
+      try { await rpc("research_cancel",{ticket:job.ticket,cancel_key:job.cancel_key}); } catch (e) {}
+    }
   }
 
   ui.start.addEventListener("click", function () { start("rolling"); });

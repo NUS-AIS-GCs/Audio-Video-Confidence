@@ -260,10 +260,7 @@ class LiveCaptureService:
             # A bounded copy is a transaction: even a late timestamp failure leaves
             # the existing buffer, counters, client diagnostics and idle deadline unchanged.
             candidate = copy.deepcopy(session.buffer)
-            for start, x in chunks:
-                candidate.add_audio(start, x)
-            for t, rgb in decoded:
-                candidate.add_frame(t, rgb)
+            candidate.add_push(chunks, decoded)
             client = payload.get("client")
             report = _client_report(client) if isinstance(client, dict) else session.client
             result = {"status": "CAPTURING", **candidate.diagnostics(), "client": report}

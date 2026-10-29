@@ -78,7 +78,7 @@ class DeploymentUI:
                     pass
 
 
-def create_app(*, internal_adapter=None, general_research=None):
+def create_app(*, internal_adapter=None, general_research=None, research_capture=None):
     """Build the Gradio app lazily so readiness tests need no Gradio install."""
     try:
         import gradio as gr
@@ -141,6 +141,9 @@ def create_app(*, internal_adapter=None, general_research=None):
                 from .ui.general_research_section import build_general_research_section
                 with gr.Tab("General media research — NOT APPROVED"):
                     build_general_research_section(gr, general_research)
+            if research_capture is not None:
+                with gr.Tab("Local live research — NOT APPROVED"):
+                    build_live_section(gr, research_capture, research=True)
         gr.HTML(FOOTER_HTML)
     demo.queue(default_concurrency_limit=1, max_size=8, api_open=False)
     demo.aval_live_service = live_service

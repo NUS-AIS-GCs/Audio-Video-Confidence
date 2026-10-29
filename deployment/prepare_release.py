@@ -15,7 +15,8 @@ import subprocess
 
 NEW_SOURCES = {"deployment/prediction_adapter.py", "deployment/ui/internal_section.py",
                "deployment/release_gate.py", "deployment/provision_artifacts.py", "deployment/provisioned_app.py",
-               "deployment/general_decode.py", "deployment/general_inference.py", "deployment/ui/general_research_section.py"}
+               "deployment/general_decode.py", "deployment/general_inference.py", "deployment/ui/general_research_section.py",
+               "deployment/live/research_capture.py", "deployment/live/research_store.py", "deployment/live/replay.py"}
 
 
 def assemble(destination: Path):

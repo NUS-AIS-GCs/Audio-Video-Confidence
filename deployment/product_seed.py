@@ -7,6 +7,10 @@ def main():
     root=Path('/cache/verified')
     report=provision_artifacts(root,source_root=Path('/source-models'))
     if not report['ready']:raise RuntimeError('MODEL_PROVISIONING_FAILED')
+    source_head2=Path('/source-models/Head2')
+    if source_head2.exists():
+        from deployment.temporal_presence import provision
+        provision(source_head2,root/'Head2')
     for path in root.rglob('*'):
         path.chmod(0o555 if path.is_dir() else 0o444)
     root.chmod(0o555)

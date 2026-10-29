@@ -14,6 +14,8 @@ import numpy as np
 import torch
 
 from deployment.auth import login_owner
+from deployment.event_evidence import event_evidence, validate_event_evidence
+from deployment.temporal_presence import TemporalPresencePredictor, validate_prediction as validate_temporal_prediction
 from deployment.audio_bundle import VerifiedAudioPredictor
 from deployment.video_bundle import VerifiedVideoPredictor
 from deployment.general_decode import GeneralDecoder, PROFILE, require_research_sandbox
@@ -38,6 +40,8 @@ class ResearchPrediction:
     score: float
     logit: float
     processing_seconds: float
+    event_predictions: dict | None = None
+    temporal_predictions: dict | None = None
     threshold: float = CANDIDATES['E3'].threshold
     model_sha256: str = CANDIDATES['E3'].model_sha256
     checkpoint_sha256: str = CANDIDATES['E3'].checkpoint_sha256
@@ -46,6 +50,8 @@ class ResearchPrediction:
     production_predictions_enabled: bool = False
 
     def __post_init__(self):
+        validate_event_evidence(self.event_predictions)
+        validate_temporal_prediction(self.temporal_predictions)
         if (not re.fullmatch('[a-f0-9]{32}', self.request_id)
                 or any(not re.fullmatch('[a-f0-9]{64}', x) for x in (self.source_sha256,self.profile_sha256))
                 or self.threshold != CANDIDATES['E3'].threshold or self.model_sha256 != CANDIDATES['E3'].model_sha256
@@ -61,7 +67,7 @@ class ResearchPrediction:
         return {**asdict(self), 'classification':'Original-like pairing' if self.score>=self.threshold else 'Audio-substituted-like pairing',
             'model_version':'E3 / frozen concatenation + MLP', 'score_semantics':'uncalibrated sigmoid correspondence score',
             'implementation_status':'IMPLEMENTED', 'numerical_temporal_release_validation':'BLOCKED',
-            'independent_approval':None, 'event_predictions':None, 'temporal_predictions':None,
+            'independent_approval':None,
             'limitation':'Pairing correspondence does not prove physical sound-source causation.'}
 
 
@@ -99,19 +105,23 @@ class GeneralResearchService:
         self.audio = VerifiedAudioPredictor(Artifact(str(self.models/'audio/model_card.json'),AUDIO_CARD),Path(derived))
         self.video = VerifiedVideoPredictor(Artifact(str(self.models/'video/model_card.json'),VIDEO_CARD))
         self.fusion = FrozenFusionInference(self.models/'E3', candidate='E3')
+        self.temporal = TemporalPresencePredictor(self.models/'Head2') if (self.models/'Head2').exists() else None
         self._models = (self.audio.model,self.video.model,self.fusion._model)
         self._classes = (tuple(self.audio.class_names),tuple(self.video.class_names))
         if self._classes[0] != self._classes[1]:
             raise DeploymentError('GENERAL_CLASS_ORDER_MISMATCH')
         self._execution = (torch.get_num_threads(),torch.get_num_interop_threads(),torch.backends.mkldnn.enabled)
         self.load_counts = {'audio':1,'video':1,'E3':1}
+        if self.temporal is not None:self.load_counts['Head2']=1
         self._lock = Lock()
         self.upload_store = None
         self.profile = {'id':PROFILE, 'artifacts':self._catalog,
             'runtime':{n:importlib.metadata.version(n) for n in PINNED_VERSIONS},
             'decoder_binaries':{n:a.sha256 for n,a in self.decoder.executables.items()},
             'source_hashes':{n:hashlib.sha256(Path(__file__).with_name(n).read_bytes()).hexdigest()
-                             for n in ('general_decode.py','general_inference.py')},
+                             for n in ('general_decode.py','general_inference.py','event_evidence.py','event_class_names.json',
+                                       'temporal_presence.py','temporal_presence_catalog.json')},
+            'temporal_presence':self.temporal.metadata if self.temporal is not None else None,
             'sandbox':self.decoder.sandbox, 'torch_execution':self._execution,
             'audio':'FFmpeg mono 16k PCM_s16le -t 10; float32 /32768; inherited authentic BEATs preprocessing',
             'video':'CFR int(second*fps); FFmpeg BGR24; OpenCV BGR->RGB and INTER_LINEAR 224x224; inherited ImageNet normalization',
@@ -132,6 +142,7 @@ class GeneralResearchService:
         for name,binding in self._catalog.items():
             Artifact(str(self.models/name),binding['sha256']).verify()
         self.audio.encoder.require_ready(); self.video.encoder.require_ready()
+        if self.temporal is not None:self.temporal.require_ready()
         validate_live_model(self.fusion._model,self.fusion.metadata.model)
         if model_fingerprint(self.fusion._model) != CANDIDATES['E3'].model_sha256:
             raise DeploymentError('GENERAL_FROZEN_MODEL_CHANGED')
@@ -147,9 +158,11 @@ class GeneralResearchService:
             self._integrity()
             decoded = self.decoder.decode(content,filename)
             score, logit, audio, visual = self._forward_window(decoded.waveform, decoded.frames)
+            temporal = self.temporal_prediction(audio,visual)
             self._integrity()
             result = ResearchPrediction(uuid.uuid4().hex,decoded.source_sha256,self.profile_sha256,
-                score,logit,float(time.perf_counter()-start)).to_dict()
+                score,logit,float(time.perf_counter()-start),event_predictions=event_evidence(audio,visual),
+                temporal_predictions=temporal).to_dict()
             result['diagnostics'] = {'timing':decoded.timing,'waveform_sha256':decoded.waveform_sha256,
                 'frames_sha256':decoded.frames_sha256,'audio_embedding_shape':list(audio.embeddings.shape),
                 'video_embedding_shape':list(visual.embeddings.shape),'audio_probabilities_shape':list(audio.probs.shape),
@@ -164,6 +177,9 @@ class GeneralResearchService:
             return error('GENERAL_INFERENCE_FAILED')
         finally:
             self._lock.release()
+
+    def temporal_prediction(self,audio,visual):
+        return self.temporal.predict(audio.embeddings,visual.embeddings) if self.temporal is not None else None
 
     def _forward_window(self, waveform, frames):
         """Shared authentic forward; caller owns the worker lock and integrity checks.

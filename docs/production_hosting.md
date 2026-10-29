@@ -1,5 +1,11 @@
 # GC2 private Linux hosting — prepared, not deployed
 
+For the final three-head candidate, also follow the
+[30 October handoff](deployment_handoff_20261030.md): provision and verify
+`Head2/weights.pt` and `Head2/metadata.json` separately. Base-only provisioning
+or base-only preflight does not establish three-head readiness. Use the latest
+reviewed source commit and image; historical measurements below are context.
+
 Use the existing `deployment.run_product_demo` supervisor, localhost broker and signed upload/live spools. One isolated worker loads the original models and handles both queues. No new HTTP inference service, public reverse proxy, model change or release-gate activation is introduced. The target host must be confirmed by the owner before executing installation/start commands.
 
 ## Supported host profile

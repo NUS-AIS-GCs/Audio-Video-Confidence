@@ -120,14 +120,15 @@ def create_app(*, internal_adapter=None, general_research=None, research_capture
         analytics_enabled=False,
     ) as demo:
         header=header_html(model_ready)
-        if private_demo:header=header.replace('Model verification unavailable','Private model demonstration')
         gr.HTML(header, head=f"<style>{BRAND_CSS}</style>")
         if private_demo:
             if general_research is None or research_capture is None:
                 raise RuntimeError('PRIVATE_DEMO_ADAPTERS_REQUIRED')
-            gr.Markdown('**Private authenticated demonstration.** Upload and completed live captures use the '
-                'original models in a separate isolated worker. Raw scores are uncalibrated; public release '
-                'and scientific numerical acceptance remain unapproved.')
+            with gr.Accordion('Model limitations', open=False):
+                gr.Markdown('Private experimental demonstration. Predictions use the trained models in a separate '
+                    'isolated worker. Scores are uncalibrated and do not prove physical sound causation. '
+                    'Head 2 was evaluated on original matched AVE clips; swapped and live inputs are outside '
+                    'that evaluated temporal scope. Independent public release approval remains pending.')
         if not model_ready and not private_demo:
             gr.HTML(READINESS_HTML)
             with gr.Accordion(f"Startup status: {len(categories)} items not ready", open=False):
@@ -135,9 +136,9 @@ def create_app(*, internal_adapter=None, general_research=None, research_capture
         with gr.Tabs():
             if private_demo:
                 from .ui.general_research_section import build_general_research_section
-                with gr.Tab('Verify uploaded video'):
+                with gr.Tab('Upload Video'):
                     build_general_research_section(gr, general_research, private_demo=True)
-                with gr.Tab('Verify live capture'):
+                with gr.Tab('Live Verification'):
                     build_live_section(gr, research_capture, research=True)
             else:
                 with gr.Tab("Upload verification"):

@@ -1,5 +1,10 @@
 # This catalog is byte-hashed. Preserve the committed LF bytes on Windows.
 deployment/artifact_catalog.json -text
+# The event vocabulary is the exact SHA-bound producer class file, including bytes.
+deployment/event_class_names.json -text
+deployment/temporal_presence_catalog.json -text
+docs/temporal_presence_protocol.json -text
+fusion/*temporal_presence*.py text eol=lf
 # Research source hashes are part of the explicit candidate runtime profile.
 deployment/general_*.py text eol=lf
 deployment/live/research_*.py text eol=lf

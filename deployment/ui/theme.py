@@ -1,4 +1,5 @@
 """Local dark-first product styling; no remote fonts, analytics or assets."""
+from deployment.ui.result_sections import RESULT_CSS
 
 BRAND_CSS = """
 :root, body, .dark, .gradio-container, .dark .gradio-container {
@@ -93,6 +94,8 @@ body {background:#080f1e!important;margin:0;font-family:ui-sans-serif,system-ui,
 @media(prefers-reduced-motion:reduce) {*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 """
 
+BRAND_CSS += RESULT_CSS
+
 LOGIN_CSS = """
 .wrap.svelte-14xt79u {min-height:100vh;margin:0!important;padding:32px 20px!important;box-sizing:border-box;
  background:radial-gradient(ellipse at 25% 15%,#16324a 0%,#0b1427 40%,#080f1e 75%)!important}
@@ -108,24 +111,23 @@ LOGIN_CSS = """
 """
 
 LOGIN_HTML = """<div class="av-login"><div class="av-logo" aria-hidden="true">AV</div>
-<p class="av-eyebrow">AVALIDATE / SECURE WORKSPACE</p><h1>Welcome to AValidate.</h1>
-<p>Verify what you see.<br>Validate what you hear.</p>
-<p>Explore audio-video pairing correspondence in a private research workspace.</p>
+<p class="av-eyebrow">NUS-ISS | GC2</p><h1>Welcome to AValidate.</h1>
+<p>Audio-Visual Sound Source Verification</p>
+<p>See it. Hear it. Verify the connection.</p>
 <p>Sign in with your assigned credentials. Uploads are isolated to your login session
-and removed after checking or expiry. Model verification remains unavailable pending validation.</p></div>"""
+and removed after checking or expiry.</p></div>"""
 
 
 def header_html(model_ready: bool) -> str:
     # Finding artifacts at startup never grants a release approval.
     return """<header class="av-header"><div class="av-brand">
 <div class="av-logo" aria-hidden="true">AV</div><div><h1 class="av-title">A<span>Validate</span></h1>
-<p class="av-sub">Audio-visual correspondence research</p></div></div>
-<span class="av-badge">Model verification unavailable</span></header>
+<p class="av-sub">Audio-Visual Sound Source Verification</p></div></div>
+<span class="av-sub">NUS-ISS | GC2</span></header>
 <section class="av-hero"><div><p class="av-eyebrow">AUDIO + VISION / ONE PERSPECTIVE</p>
-<h2>Verify what you see.<br><span>Validate what you hear.</span></h2>
-<p class="av-sub">Explore whether a clip's audio and video resemble an original pairing.
-Start with a secure, ten-second media check.</p></div>
-<div class="av-research-mark">NUS-ISS · GC2<br>APPLIED AI RESEARCH<br>PRIVATE WORKSPACE</div></section>"""
+<h2>See it. Hear it.<br><span>Verify the connection.</span></h2>
+<p class="av-sub">Upload a ten-second video or record locally to see event recognition,
+temporal AV presence and audio-visual correspondence predictions.</p></div></section>"""
 
 
 READINESS_HTML = """<aside class="av-notice" role="status"><span aria-hidden="true">◈</span>
@@ -141,7 +143,8 @@ The trained architecture compares representations across ten corresponding time 
 <article><b>04 →</b><h3>Fuse</h3><p>Frozen E3 concatenation + MLP combines representations. A2 attention is a comparison.</p></article>
 <article><b>05</b><h3>Decide</h3><p>Apply the frozen operating point: original-like or audio-substituted-like pairing.</p></article></div>
 <p class="av-note">Pairing correspondence does not prove that a visible object physically generated a sound.
-The sigmoid score is uncalibrated. No per-second fused audiovisual-presence head has been trained.</p></section>"""
+The sigmoid score is uncalibrated. The optional trained Head 2 predicts annotated AVE event presence
+per second; its separate threshold and evaluated scope do not change E3 or public readiness.</p></section>"""
 
 ABOUT_MD = """### Model information
 
@@ -150,16 +153,20 @@ ABOUT_MD = """### Model information
 | Audio | BEATs iter3 + trained LoRA and classification head | 10 × 256 embeddings; 10 × 29 event probabilities |
 | Video | Trained ResNet-18 | 10 × 512 embeddings; 10 × 29 event probabilities |
 | Primary fusion | E3 concatenation + MLP | One uncalibrated correspondence score |
+| Optional temporal presence | Separately trained MLP + bidirectional GRU | Ten uncalibrated binary scores for annotated joint AVE event presence |
 | Comparison | A2 attention | Separate pairing score |
 
 **Public status: MODEL_NOT_READY.** Historical audio/video exact parity remains unresolved.
 Numerical tolerance acceptance is inactive; general decoder/shared-clock approval and an
 independently reviewed release decision are pending. Adding an adapter does not grant approval.
 
-Event probabilities belong to their respective encoders; they are not displayed as validated
-event labels here. Live capture is a diagnostics demonstration. No model predicts a per-second
-fused audiovisual-presence label. TEST data must not be used for tuning.
+In the private authenticated product, Head 1 shows each encoder's original per-second
+event softmax evidence and mean event rankings. These scores are uncalibrated. Head 2
+uses its separately versioned trained artifact when privately provisioned; otherwise it is unavailable.
+Its evaluation covers original matched AVE clips, not swapped/live temporal ground truth.
+Head 3 retains the frozen E3 pairing decision. Ordinary public upload/live gates stay closed.
+TEST data must not be used for tuning.
 """
 
-FOOTER_HTML = """<footer class="av-footnote"><span>AValidate · NUS-ISS Applied AI</span>
+FOOTER_HTML = """<footer class="av-footnote"><span>AValidate · NUS-ISS | GC2</span>
 <span>Session-isolated uploads · Local preview · No analytics</span></footer>"""

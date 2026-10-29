@@ -87,9 +87,10 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   },{},{timeout:240000});
   if(physical)clearTimeout(safety);
   const display=await live.locator('.av-research-result').innerText();
-  if(!display.includes('EXPERIMENTAL_LIVE_INPUT_NOT_APPROVED'))
+  if(!(await live.locator('[data-av-raw-result]').count()))
     throw Error('CAPTURE_REJECTED: '+await live.locator('.av-msg').innerText()+' '+await live.locator('.av-contract').innerText());
-  const result=JSON.parse(display.slice(display.indexOf('{')));checks.ticket=result.ticket;checks.result=result;checks.browser_version=await browser.version();
+  const result=JSON.parse(await live.locator('[data-av-raw-result]').textContent());checks.ticket=result.ticket;checks.result=result;checks.browser_version=await browser.version();
+  assert.equal(result.status,'EXPERIMENTAL_LIVE_INPUT_NOT_APPROVED');assert.ok(display.includes(result.classification));
   checks.page_errors=errors;checks.authenticated_browser_replay=true;
   checks.capture_deleted=!fs.existsSync(path.join(spool,checks.ticket+'.capture.json'));
   checks.public_ready_stays_closed=result.live_input.public_live_readiness.inference_enabled===false;

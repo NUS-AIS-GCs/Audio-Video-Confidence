@@ -284,6 +284,8 @@ class LiveCaptureService:
     def _check(self, owner: str, payload) -> dict:
         try:
             session = self._get(owner, payload)
+            if payload.get('complete') is True:
+                session.buffer.finish_window()
             snap = session.buffer.snapshot()
             media = session.buffer.to_raw_media_input(snap)
             session.last_seen = self.clock()

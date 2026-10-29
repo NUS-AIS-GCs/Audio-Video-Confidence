@@ -7,6 +7,7 @@ Phase 6 pipeline has a verified compressed-media decoder and raw-to-TRAIN parity
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from fractions import Fraction
 import importlib.metadata
 import importlib.util
 import json
@@ -513,10 +514,17 @@ def validate_upload(
                     or audio_streams[0].codec_name != allowed_audio_codec):
                 return _result("REJECTED", "UNSUPPORTED_CODEC")
             durations = tuple(stream.duration for stream in media.streams)
-            if any(not math.isfinite(value) or value <= 0 or
-                   abs(value - MAX_CLIP_SECONDS) > DURATION_TOLERANCE_SECONDS for value in durations):
+            if any(not math.isfinite(value) or value <= 0 for value in durations):
                 return _result("REJECTED", "INVALID_DURATION")
-            if abs(audio_streams[0].duration - video_streams[0].duration) > DURATION_TOLERANCE_SECONDS:
+            # ffprobe reports decimal seconds. Compare those decimal values
+            # exactly: binary subtraction makes 10.05 - 10 exceed 0.05.
+            # No epsilon: even the next float outside either bound is rejected.
+            decimal_durations = tuple(Fraction(str(float(value))) for value in durations)
+            target = Fraction(str(MAX_CLIP_SECONDS))
+            limit = Fraction(str(DURATION_TOLERANCE_SECONDS))
+            if any(abs(value - target) > limit for value in decimal_durations):
+                return _result("REJECTED", "INVALID_DURATION")
+            if abs(decimal_durations[0] - decimal_durations[1]) > limit:
                 return _result("REJECTED", "MODALITY_DURATION_MISMATCH")
     except DeploymentError as exc:
         code = exc.code

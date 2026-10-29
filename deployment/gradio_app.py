@@ -78,7 +78,7 @@ class DeploymentUI:
                     pass
 
 
-def create_app(*, internal_adapter=None, general_research=None, research_capture=None):
+def create_app(*, internal_adapter=None, general_research=None, research_capture=None, private_demo=False):
     """Build the Gradio app lazily so readiness tests need no Gradio install."""
     try:
         import gradio as gr
@@ -119,16 +119,31 @@ def create_app(*, internal_adapter=None, general_research=None, research_capture
         title="AValidate",
         analytics_enabled=False,
     ) as demo:
-        gr.HTML(header_html(model_ready), head=f"<style>{BRAND_CSS}</style>")
-        if not model_ready:
+        header=header_html(model_ready)
+        if private_demo:header=header.replace('Model verification unavailable','Private model demonstration')
+        gr.HTML(header, head=f"<style>{BRAND_CSS}</style>")
+        if private_demo:
+            if general_research is None or research_capture is None:
+                raise RuntimeError('PRIVATE_DEMO_ADAPTERS_REQUIRED')
+            gr.Markdown('**Private authenticated demonstration.** Upload and completed live captures use the '
+                'original models in a separate isolated worker. Raw scores are uncalibrated; public release '
+                'and scientific numerical acceptance remain unapproved.')
+        if not model_ready and not private_demo:
             gr.HTML(READINESS_HTML)
             with gr.Accordion(f"Startup status: {len(categories)} items not ready", open=False):
                 gr.Markdown("\n".join(f"- `{item}`" for item in categories))
         with gr.Tabs():
-            with gr.Tab("Upload verification"):
-                build_upload_section(gr, ui)
-            with gr.Tab("Live verification"):
-                build_live_section(gr, live_service)
+            if private_demo:
+                from .ui.general_research_section import build_general_research_section
+                with gr.Tab('Verify uploaded video'):
+                    build_general_research_section(gr, general_research, private_demo=True)
+                with gr.Tab('Verify live capture'):
+                    build_live_section(gr, research_capture, research=True)
+            else:
+                with gr.Tab("Upload verification"):
+                    build_upload_section(gr, ui)
+                with gr.Tab("Live verification"):
+                    build_live_section(gr, live_service)
             with gr.Tab("How It Works"):
                 gr.HTML(HOW_HTML)
             with gr.Tab("Model Information"):
@@ -137,11 +152,11 @@ def create_app(*, internal_adapter=None, general_research=None, research_capture
                 from .ui.internal_section import build_internal_section
                 with gr.Tab("Internal TRAIN demonstration"):
                     build_internal_section(gr, internal_adapter)
-            if general_research is not None:
+            if general_research is not None and not private_demo:
                 from .ui.general_research_section import build_general_research_section
                 with gr.Tab("General media research — NOT APPROVED"):
                     build_general_research_section(gr, general_research)
-            if research_capture is not None:
+            if research_capture is not None and not private_demo:
                 with gr.Tab("Local live research — NOT APPROVED"):
                     build_live_section(gr, research_capture, research=True)
         gr.HTML(FOOTER_HTML)

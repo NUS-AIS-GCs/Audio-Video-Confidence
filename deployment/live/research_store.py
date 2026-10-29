@@ -86,7 +86,17 @@ class ResearchStore:
         temporary=self.path(ticket,'.tmp-'+secrets.token_hex(8))
         try:
             with temporary.open('xb') as stream:stream.write(raw)
-            os.chmod(temporary,0o600);os.replace(temporary,target)
+            os.chmod(temporary,0o600)
+            # Windows-backed Docker mounts can briefly deny replacing an open
+            # reader's file. Keep the old signed value intact; never unlink it
+            # before publication. Retry only this bounded sharing violation.
+            for attempt in range(6):
+                try:
+                    os.replace(temporary,target)
+                    break
+                except PermissionError:
+                    if attempt==5:raise
+                    time.sleep(.01*(2**attempt))
         finally:temporary.unlink(missing_ok=True)
 
     def issue(self, owner, capture):

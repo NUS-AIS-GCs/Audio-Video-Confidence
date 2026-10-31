@@ -6,6 +6,8 @@ answers three questions: *what* is heard and seen, *when* an event is both audib
 
 NUS-ISS Graduate Certificate in Pattern Recognition Systems, Practice Module, Group 25.
 
+**Video demo:** [YouTube: AValidate Demo](https://www.youtube.com/watch?v=2_Hi2w5IPbE) — AValidate system demonstration walkthrough (NUS-ISS GC2)
+
 ![AValidate result screen: per-second temporal presence and the overall MATCH decision](docs/images/app_results.jpg)
 
 ## Highlights

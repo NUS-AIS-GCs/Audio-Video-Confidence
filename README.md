@@ -1,12 +1,3 @@
----
-title: AValidate Deployment Foundation
-emoji: 🔊
-colorFrom: blue
-colorTo: purple
-sdk: docker
-app_port: 7860
----
-
 # AValidate: See it. Hear it. Verify the connection.
 
 **Audio-visual sound-source verification.** AValidate watches and listens to a ten-second video and

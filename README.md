@@ -152,6 +152,14 @@ full-stack application; recognition on everyday webcam scenes outside AVE's cate
 4. He et al., *Deep Residual Learning for Image Recognition*, CVPR 2016.
 5. Gemmeke et al., *Audio Set: An Ontology and Human-Labeled Dataset for Audio Events*, ICASSP 2017.
 
+## AI Declaration
+
+Generative AI tools, including OpenAI ChatGPT and Codex, Claude Code and Google Gemini, were used to
+assist with system architecture review, implementation planning, code development, debugging,
+testing, experimental analysis and report preparation. All AI-assisted suggestions and outputs were
+reviewed by the project team. All model selections, implementation decisions, experimental results
+and final submitted content remain the responsibility of the team.
+
 ## Developer documentation
 
 - Deployment handoff (final three-head candidate): [docs/deployment_handoff_20261030.md](docs/deployment_handoff_20261030.md)

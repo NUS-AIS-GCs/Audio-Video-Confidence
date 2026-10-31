@@ -89,6 +89,12 @@ verified by SHA-256 against [deployment/artifact_catalog.json](deployment/artifa
 | Audio training runs | CNN, BEATs and LoRA run checkpoints | [Drive: artifacts/audio_baseline](https://drive.google.com/drive/folders/1vVuBj0hG7ehQC3P9lHif5v_P69xa5-wJ) |
 | Pretrained BEATs | `BEATs_iter3.pt`, `BEATs_iter3_plus_AS2M.pt` (Microsoft) | [Drive: pretrained](https://drive.google.com/drive/folders/1eBS03P-BBekW4VaMTwESTgAMWo95qNBI) |
 | Video bundle | ResNet-18 inference bundle | [Drive: video bundle](https://drive.google.com/drive/folders/1KJ4tpDsyDfs2CwBPGnIKqAsQ3jgoLggN) |
+| Video project folder | Root video directory: training runs, MobileNet, ResNet-18, CLIP, feature caches | [Drive: vision](https://drive.google.com/drive/folders/1agXBZB_PVXGHG6JN3TNZujVXuCZ0TkSi) |
+| Video embeddings | `vision_final` (`resnet18_v1`): per-second embeddings and probabilities used by fusion | [Drive: embeddings/vision_final](https://drive.google.com/drive/folders/12wSETs-pYX0RLTS2Cx50oXc4hpBXMbVV) |
+| Video parity samples | Five canonical TRAIN clips (.mp4), sampled frame arrays, and offline embeddings | [Drive: parity_samples/vision](https://drive.google.com/drive/folders/1h7vg_Tzc30uTZlMEJNE-stEw5nvM44G5) |
+| Video demo | AValidate system demonstration walkthrough (NUS-ISS GC2) | [YouTube: AValidate Demo](https://www.youtube.com/watch?v=2_Hi2w5IPbE) |
+| Dataset | AVE dataset (official source and download instructions) | [GitHub: AVE-ECCV18](https://github.com/YapengTian/AVE-ECCV18) |
+| CoreWeave W&B | Experiment tracking: training curves, configs, evaluation artifacts | [W&B: GC2-AValidate/avalidate](https://forge.coreweave.com/wandb/GC2-AValidate/avalidate) |
 | Experiment tracking | Training curves, configs, evaluation artifacts | [W&B: GC2-AValidate/avalidate](https://wandb.ai/GC2-AValidate/avalidate) |
 
 ## Running the app
@@ -166,6 +172,9 @@ and final submitted content remain the responsibility of the team.
 - Prediction diagnosis and known limitations: [docs/prediction_diagnosis_20261030.md](docs/prediction_diagnosis_20261030.md)
 - Frontend and live capture: [docs/phase8_frontend_live.md](docs/phase8_frontend_live.md)
 - Upload hardening: [docs/phase8_stage2h_upload_hardening.md](docs/phase8_stage2h_upload_hardening.md)
+- Video benchmarks and CLIP experiments: [vision/results-video.md](vision/results-video.md)
+- Video export handoff: [docs/video_export_handoff.md](docs/video_export_handoff.md)
+- Video demo walkthrough: [YouTube: AValidate Demo](https://www.youtube.com/watch?v=2_Hi2w5IPbE)
 
 The default Docker entry point remains the gated application; the authenticated product demo above
 is the supported way to run predictions locally. The earlier research Streamlit prototype is `app.py`.

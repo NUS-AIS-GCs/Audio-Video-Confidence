@@ -7,76 +7,166 @@ sdk: docker
 app_port: 7860
 ---
 
-# AValidate
+# AValidate: See it. Hear it. Verify the connection.
 
-This repository contains a Docker/Gradio readiness interface. Model inference is disabled until
-the exact trained encoder artifacts, decoder contract, and raw-to-TRAIN export parity have been
-verified. The interface does not return placeholder, annotation-derived, or synthetic predictions.
-The app requires `AVAL_ACCESS_MODE=gradio_auth` and non-empty `AVAL_GRADIO_USERNAME` and
-`AVAL_GRADIO_PASSWORD` runtime secrets before startup. Use a Private Space during initial testing;
-the app authentication protects its UI and direct event/API requests.
+**Audio-visual sound-source verification.** AValidate watches and listens to a ten-second video and
+answers three questions: *what* is heard and seen, *when* an event is both audible and visible, and
+*whether* the soundtrack actually belongs to the video.
 
-The research Streamlit application remains `app.py` and is not the Docker entry point.
+NUS-ISS Graduate Certificate in Pattern Recognition Systems, Practice Module, Group 25.
 
-For the working authenticated **private product demonstration**, use
-`python -m deployment.run_product_demo --models PATH_TO_VERIFIED_MODELS --port 7862`.
-It combines real MP4/MOV verification and signed-ticket live replay through one isolated worker.
-See [local launch and acceptance evidence](docs/product_demo.md). Public release gates remain closed.
+![AValidate result screen: per-second temporal presence and the overall MATCH decision](docs/images/app_results.jpg)
 
-The final private candidate presents real event evidence, frozen trained Head 2
-temporal presence and E3 correspondence for upload and completed live captures.
-Use the [30 October deployment handoff](docs/deployment_handoff_20261030.md)
-for the complete source review, separate private Head 2 provisioning and SSH-only
-Linux launch requirements. The [latest diagnosis](docs/prediction_diagnosis_20261030.md)
-defines current scientific limitations; physical-speaking Case B remains unresolved.
-Earlier stage reports below describe historical candidates and do not approve this revision.
+## Highlights
 
-## Frontend and live capture
+- **Three prediction heads** on one ten-second clip: event recognition, per-second audio-visual presence, and whole-clip MATCH / MISMATCH.
+- **Audio:** BEATs fine-tuned with LoRA (rank 8, under 1% of parameters trained), **81.84%** clip accuracy on the AVE test set.
+- **Vision:** ResNet-18, **73.38%** clip accuracy on the AVE test set.
+- **Correspondence:** E3 fusion MLP, **0.970** validation ROC-AUC on 804 original vs audio-swapped pairs.
+- **Temporal presence:** bidirectional GRU, **70.65%** macro-F1 on 394 source-disjoint test clips (always-present baseline: 45.06%).
+- **Web app** for uploaded videos and live webcam + microphone capture, running models in an isolated, no-network Docker worker. Every checkpoint and threshold is SHA-256 pinned.
 
-The dark-first Gradio app has Upload verification, Live verification, How It Works and Model Information tabs.
-The Upload tab provides a local video preview, Verify progress and admission/result cards.
-The Live tab records ten aligned seconds from a webcam and microphone (or keeps a rolling
-ten-second buffer) and shows capture and
-sync diagnostics only. Predictions stay disabled in both. See
-[docs/phase8_frontend_live.md](docs/phase8_frontend_live.md) for usage, architecture, tests and
-integration notes.
+## How it works
 
-Stage 2G hosting settings, security blockers, artifact requirements and the deployment procedure
-are in [docs/phase8_stage2g_deployment.md](docs/phase8_stage2g_deployment.md), with public settings
-in [deployment/hf-space.env.example](deployment/hf-space.env.example). Public predictions remain
-disabled. No Hugging Face deployment has been performed.
+![AValidate pipeline overview](docs/images/pipeline_overview.jpg)
 
-Stage 2H upload ownership, transport limits, expiry and container changes are documented in
-[docs/phase8_stage2h_upload_hardening.md](docs/phase8_stage2h_upload_hardening.md).
-Use that report for the current upload security assessment; Stage 2G records the earlier audit.
+1. **Input:** a ten-second clip, uploaded or captured live from webcam and microphone.
+2. **Preprocessing:** audio is decoded to 16 kHz mono; one frame is sampled per second at 224 × 224.
+3. **Audio branch:** BEATs + LoRA produces a 256-d embedding and 29 class scores for every second.
+4. **Visual branch:** ResNet-18 produces a 512-d embedding and 29 class scores for every second.
+5. **Three heads:**
+   - **Head 1, Event Recognition:** top audio and visual events, per second, from each branch.
+   - **Head 2, Temporal AV Presence:** a separately trained GRU predicts, per second, whether an event is both seen and heard (threshold 0.25).
+   - **Head 3, AV Correspondence:** the E3 model concatenates both embeddings and an MLP scores the pairing as MATCH or MISMATCH (frozen threshold 0.009579).
 
-The current UI, authenticated internal TRAIN demonstration, typed prediction adapter, validation
-evidence and manual release procedure are documented in
-[docs/prediction_ui_release.md](docs/prediction_ui_release.md). The default Docker entry point remains
-the gated application. `python -m deployment.internal_app` is a separate experimental entry point
-requiring the existing authorized, hash-bound TRAIN artifacts; it cannot enable public predictions.
-No production inference approval, checkpoint substitution or threshold change is introduced.
+![Full system architecture](docs/images/system_architecture.jpg)
 
-The subsequent [authentic upload/live integration handoff](docs/final_prediction_live_handoff.md)
-records private runtime provisioning, the genuine uploaded TRAIN path, live cleanup fixes and the
-remaining scientific and deployment approvals. General upload and live model predictions stay disabled.
+## Results
 
-## General-media research candidate
+All numbers come from the experiment logs in this repository and the team's W&B project.
 
-The optional `deployment.general_research_app` runs the authentic frozen models
-on a restricted general-media profile inside a no-network, read-only, resource-limited
-Linux research container. It requires existing authenticated upload ownership.
-The default app still returns `MODEL_NOT_READY`; live capture remains diagnostics-only.
-Historical parity and independent release authorization remain blocked.
-See the [DRAFT / NOT APPROVED release dossier](docs/general_upload_release_draft.md)
-for supported scope, genuine evidence, reproduction and approval requirements.
+### Audio and visual recognition (AVE test set, 402 clips)
 
-## Local live-input research
+![Audio and visual model performance](docs/images/recognition_results.jpg)
 
-The optional `deployment.live_research_app` captures authenticated, consented windows
-on localhost and exchanges short-lived signed tickets with a separate offline model
-worker. The worker retains the existing no-network Linux sandbox requirements.
-The default Upload and Live prediction gates remain closed. See the
-[DRAFT live-input compatibility dossier](docs/live_input_compatibility_draft.md)
-for genuine fixture results, the unsuccessful single physical attempt, numerical
-differences, security tests and independent approval requirements.
+| Model | Clip accuracy | Clip macro-F1 | Per-second macro-F1 |
+|---|---|---|---|
+| Log-Mel CNN (v4) | 72.89% | 70.01% | 52.29% |
+| Frozen BEATs | 80.10% | 77.41% | 66.32% |
+| **BEATs + LoRA r8 (selected)** | **81.84%** | **78.72%** | **68.56%** |
+| MobileNet-V3 | 72.64% | 71.64% | 60.89% |
+| **ResNet-18 (selected)** | **73.38%** | **72.24%** | **63.75%** |
+
+A BEATs checkpoint pretrained with AudioSet labels (AS2M) scored 88.31%, but AVE clips are drawn
+from AudioSet, so it may have seen our test clips. It is reported for reference only and was not
+selected. Details: [audio/RESULTS.md](audio/RESULTS.md), [vision/results-video.md](vision/results-video.md).
+
+### Audio-visual correspondence (validation, 804 pairs)
+
+![Correspondence validation results](docs/images/correspondence_results.jpg)
+
+The selected E3 MLP reaches 0.970 ROC-AUC, ahead of the label-agreement baseline (0.922) and
+cross-attention (0.961). Correspondence is evaluated on validation pairs; see
+[docs/fusion_cross_attention_phase5_summary.md](docs/fusion_cross_attention_phase5_summary.md).
+
+### Temporal AV presence (test, 394 clips / 3,940 seconds)
+
+![Head 2 test performance](docs/images/temporal_presence_results.png)
+
+See [docs/temporal_presence.md](docs/temporal_presence.md).
+
+## Dataset
+
+**AVE (Audio-Visual Event)**, Tian et al., ECCV 2018: 4,143 annotated ten-second clips from 4,097
+YouTube videos, 28 event categories plus background, with per-second labels. We use the official
+3,339 / 402 / 402 train / validation / test split.
+
+- Official source: <https://github.com/YapengTian/AVE-ECCV18> · Paper: <https://arxiv.org/abs/1803.08842>
+- Correspondence pairs: each clip gives one original and one audio-swapped pair (6,678 train / 804 validation).
+- Data audit: 45 doubly annotated videos (28 previously dropped samples restored) and 18 videos shared across splits (flagged; excluded from Head 2).
+
+## Models, embeddings and experiment tracking
+
+Model weights and embeddings are too large for Git. They are shared read-only on Google Drive and
+verified by SHA-256 against [deployment/artifact_catalog.json](deployment/artifact_catalog.json).
+
+| Resource | Contents | Link |
+|---|---|---|
+| Audio project folder | Everything below, plus feature caches | [Drive: AValidate](https://drive.google.com/drive/folders/1gOzBd-d1KlFIrLerqFrFxVWumrwKqau8) |
+| Audio inference bundle | BEATs + LoRA encoder, head weights, normalisation stats, model card | [Drive: inference/audio](https://drive.google.com/drive/folders/185BtXY93QUt32gd1YVGGQ3fCeEGLXKAI) |
+| Audio embeddings | `audio_final`: per-second embeddings and probabilities used by fusion | [Drive: embeddings/audio_final](https://drive.google.com/drive/folders/11FCLmW8-0Zlh-bfX8qtvDKbEKPcJgNoZ) |
+| Audio training runs | CNN, BEATs and LoRA run checkpoints | [Drive: artifacts/audio_baseline](https://drive.google.com/drive/folders/1vVuBj0hG7ehQC3P9lHif5v_P69xa5-wJ) |
+| Pretrained BEATs | `BEATs_iter3.pt`, `BEATs_iter3_plus_AS2M.pt` (Microsoft) | [Drive: pretrained](https://drive.google.com/drive/folders/1eBS03P-BBekW4VaMTwESTgAMWo95qNBI) |
+| Video bundle | ResNet-18 inference bundle | [Drive: video bundle](https://drive.google.com/drive/folders/1KJ4tpDsyDfs2CwBPGnIKqAsQ3jgoLggN) |
+| Experiment tracking | Training curves, configs, evaluation artifacts | [W&B: GC2-AValidate/avalidate](https://wandb.ai/GC2-AValidate/avalidate) |
+
+## Running the app
+
+Requirements: Python 3.11, Docker (Linux containers), and the verified model directory from the
+links above. From the repository root:
+
+```bash
+python -m deployment.run_product_demo --models PATH_TO_VERIFIED_MODELS --private-dir PATH_TO_PRIVATE_DIR --port 7864
+```
+
+The launcher builds the image, verifies every model file against its SHA-256 hash, and starts the
+web app with a separate offline model worker. Open <http://127.0.0.1:7864> and sign in with the
+generated credentials saved in your private directory. Stop with Ctrl+C, or rerun with `--stop`.
+
+Step-by-step demo (upload a MATCH clip, an audio-swapped MISMATCH clip, then a live capture):
+[docs/local_three_head_demo.md](docs/local_three_head_demo.md).
+
+The app has four tabs: **Upload Video**, **Live Verification**, **How It Works** and **Model Information**.
+
+## Repository layout
+
+| Path | What is inside |
+|---|---|
+| `audio/` | Audio extraction, log-Mel CNN, BEATs, LoRA, training, evaluation, export and inference |
+| `vision/` | Frame extraction, MobileNet / ResNet-18 training, CLIP probe experiments, export and inference |
+| `fusion/` | Correspondence baselines, E3 MLP, cross-attention study, temporal presence (Head 2) |
+| `deployment/` | Gradio app, upload and live capture, broker, isolated inference worker, artifact catalogs |
+| `notebooks/` | Colab training notebooks for the audio and vision branches |
+| `tests/` | Python and JavaScript test suites |
+| `docs/` | Design notes, experiment reports and handoffs |
+| `Documentations/` | Proposal, presentations and project documents |
+
+## Testing
+
+```bash
+python -m pytest tests
+node --test tests/js
+```
+
+## Team
+
+| Member | Responsibilities |
+|---|---|
+| Ghanashyam R K P (A0357701E) | Audio branch (CNN, BEATs, LoRA), data audit, frontend and live capture |
+| Gupta Swaraj (A0357457N) | Visual branch (MobileNet, ResNet-18, CLIP experiments) |
+| Veeramani Mahadevan Venkata Ganapathi Subramanian (A0355739M) | Fusion, prediction heads, integration and deployment |
+
+## Scope and limitations
+
+AValidate is an academic prototype trained on AVE's 28 event categories. A MISMATCH means weak
+evidence that the audio and video belong together, not proof of tampering, and correspondence
+scores are uncalibrated. Live capture was an extension beyond the original scope, built to test the
+full-stack application; recognition on everyday webcam scenes outside AVE's categories is limited.
+
+## References
+
+1. Tian et al., *Audio-Visual Event Localization in Unconstrained Videos*, ECCV 2018.
+2. Chen et al., *BEATs: Audio Pre-Training with Acoustic Tokenizers*, ICML 2023.
+3. Hu et al., *LoRA: Low-Rank Adaptation of Large Language Models*, ICLR 2022.
+4. He et al., *Deep Residual Learning for Image Recognition*, CVPR 2016.
+5. Gemmeke et al., *Audio Set: An Ontology and Human-Labeled Dataset for Audio Events*, ICASSP 2017.
+
+## Developer documentation
+
+- Deployment handoff (final three-head candidate): [docs/deployment_handoff_20261030.md](docs/deployment_handoff_20261030.md)
+- Prediction diagnosis and known limitations: [docs/prediction_diagnosis_20261030.md](docs/prediction_diagnosis_20261030.md)
+- Frontend and live capture: [docs/phase8_frontend_live.md](docs/phase8_frontend_live.md)
+- Upload hardening: [docs/phase8_stage2h_upload_hardening.md](docs/phase8_stage2h_upload_hardening.md)
+
+The default Docker entry point remains the gated application; the authenticated product demo above
+is the supported way to run predictions locally. The earlier research Streamlit prototype is `app.py`.
